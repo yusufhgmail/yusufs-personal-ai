@@ -220,10 +220,11 @@ class Agent:
             else:
                 # Thought without action - prompt for next step
                 history.append({"role": "assistant", "content": response_text})
-                current_prompt = "Continue with your next action or provide your final answer."
+                # Be more explicit about what we need
+                current_prompt = "You need to either:\n1. Use a tool (respond with ACTION: tool_name and ACTION_INPUT: {{...}})\n2. Provide a final answer (respond with FINAL_ANSWER: your answer)\n\nPlease choose one and respond in the correct format."
         
-        # Max iterations reached
-        final_message = "I've been thinking about this for a while. Let me summarize what I've found and ask for your guidance."
+        # Max iterations reached - provide a helpful response
+        final_message = "I apologize, but I'm having trouble processing that request. Could you please rephrase it or provide more specific details? For example:\n- 'Search for emails from [person]'\n- 'Help me draft an email to [person] about [topic]'\n- 'What can you help me with?'"
         self.interactions_store.add_message(
             conversation_id, "agent", final_message,
             {"type": "max_iterations_reached"}
@@ -249,7 +250,12 @@ class Agent:
         
         # Check if it's an approval
         if feedback.lower().strip() in ["send it", "looks good", "approved", "yes", "ok", "okay"]:
-            return "Got it! I'll proceed with sending/saving this."
+            # Continue the conversation to actually send/save the approved draft
+            return self.run(
+                "The user has approved the draft. Please proceed to send the email or save the document now. "
+                "Look at the previous messages to find the draft_id or content that was approved.",
+                conversation_id=conversation_id
+            )
         
         # Otherwise, it's an edit or correction - continue the conversation
         return self.run(

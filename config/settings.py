@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
     anthropic_api_key: str = Field(default="", alias="ANTHROPIC_API_KEY")
     llm_provider: str = Field(default="openai", alias="LLM_PROVIDER")
-    llm_model: str = Field(default="gpt-4-turbo-preview", alias="LLM_MODEL")
+    llm_model: str = Field(default="gpt-4o", alias="LLM_MODEL")
     
     # Supabase Configuration
     supabase_url: str = Field(default="", alias="SUPABASE_URL")

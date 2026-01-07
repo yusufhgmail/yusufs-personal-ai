@@ -125,6 +125,14 @@ def create_default_registry(gmail_client=None, drive_client=None) -> ToolRegistr
         message_id = registry._gmail_client.send_draft(draft_id)
         return f"Email sent successfully! Message ID: {message_id}"
     
+    def send_email(to: str, subject: str, body: str, reply_to: Optional[str] = None) -> str:
+        """Send an email directly (without creating a draft first)."""
+        if registry._gmail_client is None:
+            return f"[Gmail not configured] Would send email to {to}: {subject}"
+        
+        message_id = registry._gmail_client.send_email(to, subject, body, reply_to)
+        return f"Email sent successfully! Message ID: {message_id}"
+    
     def download_attachment(email_id: str, attachment_id: str, filename: str) -> str:
         """Download an email attachment and save to Drive."""
         if registry._gmail_client is None:
@@ -207,6 +215,22 @@ def create_default_registry(gmail_client=None, drive_client=None) -> ToolRegistr
                 "draft_id": {"type": "string", "description": "The ID of the draft to send"}
             },
             "required": ["draft_id"]
+        }
+    ))
+    
+    registry.register(Tool(
+        name="send_email",
+        description="Send an email directly (use for confirmed, approved emails only)",
+        func=send_email,
+        parameters={
+            "type": "object",
+            "properties": {
+                "to": {"type": "string", "description": "Recipient email address"},
+                "subject": {"type": "string", "description": "Email subject line"},
+                "body": {"type": "string", "description": "Email body content"},
+                "reply_to": {"type": "string", "description": "Optional: Message ID to reply to"}
+            },
+            "required": ["to", "subject", "body"]
         }
     ))
     

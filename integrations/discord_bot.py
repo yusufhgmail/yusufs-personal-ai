@@ -150,6 +150,11 @@ class ConversationManager:
         # Get or create conversation ID for this user
         conversation_id = self.user_conversations.get(user_id)
         
+        # If new user, create a conversation ID upfront
+        if conversation_id is None:
+            conversation_id = self.agent.interactions_store.create_conversation_id()
+            self.user_conversations[user_id] = conversation_id
+        
         # Check for conversation reset commands
         if message.lower().strip() in ["new conversation", "reset", "start over"]:
             conversation_id = self.agent.interactions_store.create_conversation_id()
@@ -169,7 +174,7 @@ class ConversationManager:
             # If the message is long and looks like an edit (not a command)
             if len(message) > 50 and not message.lower().startswith(('make it', 'change', 'please', 'can you')):
                 # This might be an edited draft - learn from it
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 learning_result = await loop.run_in_executor(
                     None,
                     lambda: self.learning_observer.observe_edit(original_draft, message)
@@ -187,29 +192,34 @@ class ConversationManager:
                     return response + learned_msg
         
         # Check if this is explicit feedback we can learn from
+        learned_from_feedback = None
         if self.learning_observer and conversation_id:
             feedback_triggers = ['wrong', 'don\'t', 'never', 'always', 'prefer', 'instead', 'too formal', 'too casual', 'too long', 'too short']
             message_lower = message.lower()
             if any(trigger in message_lower for trigger in feedback_triggers):
                 # Try to learn from explicit feedback
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 learning_result = await loop.run_in_executor(
                     None,
                     lambda: self.learning_observer.observe_feedback(conversation_id, message)
                 )
                 
-                # We'll still process the message, but note if we learned something
+                # Store what we learned to append to response
                 if learning_result.learned:
-                    # Learning happened - we'll append this to the response later
-                    pass
+                    learned_from_feedback = learning_result.patterns
         
         # Run the agent
         # Note: agent.run is synchronous, so we run it in an executor
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         response = await loop.run_in_executor(
             None,
             lambda: self.agent.run(message, conversation_id=conversation_id)
         )
+        
+        # Append feedback learning info if we learned something
+        if learned_from_feedback:
+            patterns_summary = ', '.join(learned_from_feedback[:2])
+            response += f"\n\n*Learned from your feedback: {patterns_summary}*"
         
         # Track if this response contains a draft for approval
         if "**Draft for your approval:**" in response or "DRAFT_FOR_APPROVAL" in response:
@@ -218,13 +228,6 @@ class ConversationManager:
                 draft_content = response.split("**Draft for your approval:**", 1)[1]
                 draft_content = draft_content.split("*Please review")[0].strip()
                 self.pending_drafts[user_id] = draft_content
-        
-        # Update conversation tracking
-        if conversation_id is None:
-            # Get the new conversation ID from the agent's interactions
-            recent = self.agent.interactions_store.get_recent_conversations(1)
-            if recent:
-                self.user_conversations[user_id] = recent[0]
         
         return response
 
