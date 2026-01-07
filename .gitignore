@@ -53,6 +53,8 @@ Thumbs.db
 # Credentials and secrets
 credentials.json
 token.json
+*_token.json
+google_credentials.json
 *.pem
 *.key
 
