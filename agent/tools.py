@@ -125,6 +125,34 @@ def create_default_registry(gmail_client=None, drive_client=None) -> ToolRegistr
         message_id = registry._gmail_client.send_draft(draft_id)
         return f"Email sent successfully! Message ID: {message_id}"
     
+    def download_attachment(email_id: str, attachment_id: str, filename: str) -> str:
+        """Download an email attachment and save to Drive."""
+        if registry._gmail_client is None:
+            return f"[Gmail not configured] Would download attachment from email: {email_id}"
+        
+        # Download the attachment
+        data = registry._gmail_client.download_attachment(email_id, attachment_id)
+        
+        if registry._drive_client is None:
+            return f"Downloaded attachment ({len(data)} bytes) but Drive not configured to save it"
+        
+        # Determine mime type from filename
+        import mimetypes
+        mime_type, _ = mimetypes.guess_type(filename)
+        if not mime_type:
+            mime_type = 'application/octet-stream'
+        
+        # Upload to Drive
+        result = registry._drive_client.upload_file(
+            name=filename,
+            content=data,
+            mime_type=mime_type
+        )
+        
+        if result:
+            return f"Saved attachment to Drive:\n- Name: {result.name}\n- ID: {result.id}\n- Link: {result.web_view_link}"
+        return "Failed to save attachment to Drive"
+    
     # Register tools
     registry.register(Tool(
         name="search_emails",
@@ -179,6 +207,175 @@ def create_default_registry(gmail_client=None, drive_client=None) -> ToolRegistr
                 "draft_id": {"type": "string", "description": "The ID of the draft to send"}
             },
             "required": ["draft_id"]
+        }
+    ))
+    
+    registry.register(Tool(
+        name="download_attachment",
+        description="Download an email attachment and save it to Google Drive",
+        func=download_attachment,
+        parameters={
+            "type": "object",
+            "properties": {
+                "email_id": {"type": "string", "description": "The email ID containing the attachment"},
+                "attachment_id": {"type": "string", "description": "The attachment ID"},
+                "filename": {"type": "string", "description": "The filename to save as"}
+            },
+            "required": ["email_id", "attachment_id", "filename"]
+        }
+    ))
+    
+    # Google Drive tools
+    def search_files(query: str, max_results: int = 10) -> str:
+        """Search for files in Google Drive."""
+        if registry._drive_client is None:
+            return f"[Google Drive not configured] Would search for: {query}"
+        
+        files = registry._drive_client.search_files(query, max_results)
+        if not files:
+            return "No files found matching your query."
+        
+        result = f"Found {len(files)} file(s):\n\n"
+        for f in files:
+            result += f"- **{f.name}**\n"
+            result += f"  ID: {f.id}\n"
+            result += f"  Type: {f.mime_type}\n"
+            if f.web_view_link:
+                result += f"  Link: {f.web_view_link}\n"
+            result += "\n"
+        return result
+    
+    def read_drive_file(file_id: str) -> str:
+        """Read the content of a file from Google Drive."""
+        if registry._drive_client is None:
+            return f"[Google Drive not configured] Would read file: {file_id}"
+        
+        file_info = registry._drive_client.get_file(file_id)
+        if not file_info:
+            return f"Could not find file with ID: {file_id}"
+        
+        # For Google Docs, export as plain text
+        if file_info.mime_type == 'application/vnd.google-apps.document':
+            content = registry._drive_client.export_google_doc(file_id, 'text/plain')
+            if content:
+                return f"**{file_info.name}** (Google Doc):\n\n{content}"
+            return f"Could not read content of: {file_info.name}"
+        
+        # For other files, try to download
+        content = registry._drive_client.download_file(file_id)
+        if content:
+            try:
+                return f"**{file_info.name}**:\n\n{content.decode('utf-8')}"
+            except UnicodeDecodeError:
+                return f"**{file_info.name}** is a binary file ({len(content)} bytes)"
+        
+        return f"Could not read content of: {file_info.name}"
+    
+    def upload_to_drive(name: str, content: str, folder_id: Optional[str] = None) -> str:
+        """Upload text content as a file to Google Drive."""
+        if registry._drive_client is None:
+            return f"[Google Drive not configured] Would upload: {name}"
+        
+        result = registry._drive_client.upload_file(
+            name=name,
+            content=content.encode('utf-8'),
+            mime_type='text/plain',
+            folder_id=folder_id
+        )
+        
+        if result:
+            return f"Uploaded file: {result.name}\nID: {result.id}\nLink: {result.web_view_link}"
+        return "Failed to upload file"
+    
+    def create_google_doc(name: str, folder_id: Optional[str] = None) -> str:
+        """Create a new Google Doc."""
+        if registry._drive_client is None:
+            return f"[Google Drive not configured] Would create doc: {name}"
+        
+        result = registry._drive_client.create_google_doc(name=name, folder_id=folder_id)
+        
+        if result:
+            return f"Created Google Doc: {result.name}\nID: {result.id}\nLink: {result.web_view_link}"
+        return "Failed to create Google Doc"
+    
+    def convert_to_google_doc(file_id: str) -> str:
+        """Convert a file to Google Docs format."""
+        if registry._drive_client is None:
+            return f"[Google Drive not configured] Would convert file: {file_id}"
+        
+        result = registry._drive_client.convert_to_google_doc(file_id)
+        
+        if result:
+            return f"Converted to Google Doc: {result.name}\nID: {result.id}\nLink: {result.web_view_link}"
+        return "Failed to convert file to Google Doc"
+    
+    # Register Drive tools
+    registry.register(Tool(
+        name="search_drive_files",
+        description="Search for files in Google Drive",
+        func=search_files,
+        parameters={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search query (Drive API format, e.g., \"name contains 'report'\")"},
+                "max_results": {"type": "integer", "description": "Maximum number of results", "default": 10}
+            },
+            "required": ["query"]
+        }
+    ))
+    
+    registry.register(Tool(
+        name="read_drive_file",
+        description="Read the content of a file from Google Drive",
+        func=read_drive_file,
+        parameters={
+            "type": "object",
+            "properties": {
+                "file_id": {"type": "string", "description": "The ID of the file to read"}
+            },
+            "required": ["file_id"]
+        }
+    ))
+    
+    registry.register(Tool(
+        name="upload_to_drive",
+        description="Upload text content as a file to Google Drive",
+        func=upload_to_drive,
+        parameters={
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Name for the file"},
+                "content": {"type": "string", "description": "Text content to upload"},
+                "folder_id": {"type": "string", "description": "Optional folder ID to upload to"}
+            },
+            "required": ["name", "content"]
+        }
+    ))
+    
+    registry.register(Tool(
+        name="create_google_doc",
+        description="Create a new empty Google Doc",
+        func=create_google_doc,
+        parameters={
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Name for the document"},
+                "folder_id": {"type": "string", "description": "Optional folder ID"}
+            },
+            "required": ["name"]
+        }
+    ))
+    
+    registry.register(Tool(
+        name="convert_to_google_doc",
+        description="Convert a file (e.g., Word doc) to Google Docs format",
+        func=convert_to_google_doc,
+        parameters={
+            "type": "object",
+            "properties": {
+                "file_id": {"type": "string", "description": "The ID of the file to convert"}
+            },
+            "required": ["file_id"]
         }
     ))
     

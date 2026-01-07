@@ -123,15 +123,18 @@ class DiscordBot:
 class ConversationManager:
     """Manages conversations between users and the AI agent."""
     
-    def __init__(self, agent):
+    def __init__(self, agent, learning_observer=None):
         """
         Initialize the conversation manager.
         
         Args:
             agent: The Agent instance to use for processing messages
+            learning_observer: Optional LearningObserver for learning from feedback
         """
         self.agent = agent
+        self.learning_observer = learning_observer
         self.user_conversations: dict[str, str] = {}
+        self.pending_drafts: dict[str, str] = {}  # user_id -> last draft content
     
     async def handle_message(self, user_id: str, message: str) -> str:
         """
@@ -151,12 +154,54 @@ class ConversationManager:
         if message.lower().strip() in ["new conversation", "reset", "start over"]:
             conversation_id = self.agent.interactions_store.create_conversation_id()
             self.user_conversations[user_id] = conversation_id
+            self.pending_drafts.pop(user_id, None)
             return "Started a new conversation. How can I help you?"
         
-        # Check if this looks like feedback on a previous draft
+        # Check if this looks like approval of a previous draft
         if conversation_id and message.lower().strip() in ["send it", "looks good", "approved", "yes", "ok", "okay"]:
+            self.pending_drafts.pop(user_id, None)  # Clear pending draft
             response = self.agent.handle_feedback(conversation_id, message)
             return response
+        
+        # Check if this might be an edited version of a draft (learning opportunity)
+        if self.learning_observer and user_id in self.pending_drafts:
+            original_draft = self.pending_drafts[user_id]
+            # If the message is long and looks like an edit (not a command)
+            if len(message) > 50 and not message.lower().startswith(('make it', 'change', 'please', 'can you')):
+                # This might be an edited draft - learn from it
+                loop = asyncio.get_event_loop()
+                learning_result = await loop.run_in_executor(
+                    None,
+                    lambda: self.learning_observer.observe_edit(original_draft, message)
+                )
+                
+                if learning_result.learned:
+                    # Clear the pending draft
+                    self.pending_drafts.pop(user_id, None)
+                    
+                    # Return acknowledgment with what was learned
+                    learned_msg = f"\n\n*Learned from your edit: {', '.join(learning_result.patterns[:2])}*"
+                    
+                    # Continue with the agent to process the edited version
+                    response = self.agent.handle_feedback(conversation_id, message)
+                    return response + learned_msg
+        
+        # Check if this is explicit feedback we can learn from
+        if self.learning_observer and conversation_id:
+            feedback_triggers = ['wrong', 'don\'t', 'never', 'always', 'prefer', 'instead', 'too formal', 'too casual', 'too long', 'too short']
+            message_lower = message.lower()
+            if any(trigger in message_lower for trigger in feedback_triggers):
+                # Try to learn from explicit feedback
+                loop = asyncio.get_event_loop()
+                learning_result = await loop.run_in_executor(
+                    None,
+                    lambda: self.learning_observer.observe_feedback(conversation_id, message)
+                )
+                
+                # We'll still process the message, but note if we learned something
+                if learning_result.learned:
+                    # Learning happened - we'll append this to the response later
+                    pass
         
         # Run the agent
         # Note: agent.run is synchronous, so we run it in an executor
@@ -165,6 +210,14 @@ class ConversationManager:
             None,
             lambda: self.agent.run(message, conversation_id=conversation_id)
         )
+        
+        # Track if this response contains a draft for approval
+        if "**Draft for your approval:**" in response or "DRAFT_FOR_APPROVAL" in response:
+            # Extract the draft content and store it
+            if "**Draft for your approval:**" in response:
+                draft_content = response.split("**Draft for your approval:**", 1)[1]
+                draft_content = draft_content.split("*Please review")[0].strip()
+                self.pending_drafts[user_id] = draft_content
         
         # Update conversation tracking
         if conversation_id is None:
