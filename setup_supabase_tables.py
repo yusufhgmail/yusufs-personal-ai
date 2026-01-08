@@ -6,7 +6,7 @@ This will create the SQL file and provide instructions.
 
 from pathlib import Path
 
-# SQL from storage/supabase_client.py
+# SQL from supabase_setup.sql
 SQL = """
 -- Guidelines table with version history
 CREATE TABLE guidelines (
@@ -32,6 +32,25 @@ CREATE TABLE interactions (
 
 -- Create index for conversation lookups
 CREATE INDEX idx_interactions_conversation ON interactions(conversation_id, created_at);
+
+-- LLM logs table for debugging and tracing LLM API calls
+CREATE TABLE llm_logs (
+    id SERIAL PRIMARY KEY,
+    conversation_id TEXT,
+    iteration INTEGER NOT NULL DEFAULT 0,
+    provider TEXT NOT NULL CHECK (provider IN ('openai', 'anthropic')),
+    model TEXT NOT NULL,
+    system_prompt TEXT NOT NULL,
+    messages JSONB NOT NULL,
+    response TEXT NOT NULL,
+    response_metadata JSONB DEFAULT '{}',
+    error TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create indexes for LLM logs
+CREATE INDEX idx_llm_logs_conversation ON llm_logs(conversation_id, iteration);
+CREATE INDEX idx_llm_logs_created ON llm_logs(created_at DESC);
 """
 
 def main():

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from config.settings import get_settings
 from storage.guidelines_store import GuidelinesStore
 from storage.interactions_store import InteractionsStore
+from storage.llm_log_store import LLMLogStore
 from agent.prompt_builder import PromptBuilder
 from agent.tools import ToolRegistry, create_default_registry
 
@@ -37,12 +38,14 @@ class Agent:
         self,
         guidelines_store: Optional[GuidelinesStore] = None,
         interactions_store: Optional[InteractionsStore] = None,
-        tool_registry: Optional[ToolRegistry] = None
+        tool_registry: Optional[ToolRegistry] = None,
+        llm_log_store: Optional[LLMLogStore] = None
     ):
         self.settings = get_settings()
         self.guidelines_store = guidelines_store or GuidelinesStore()
         self.interactions_store = interactions_store or InteractionsStore()
         self.tool_registry = tool_registry or create_default_registry()
+        self.llm_log_store = llm_log_store or LLMLogStore()
         self.prompt_builder = PromptBuilder(self.guidelines_store)
         
         # Initialize LLM client based on provider
@@ -59,8 +62,24 @@ class Agent:
         else:
             raise ValueError(f"Unknown LLM provider: {self.settings.llm_provider}")
     
-    def _call_llm(self, system_prompt: str, user_message: str, history: list[dict] = None) -> str:
-        """Call the LLM with the given prompts."""
+    def _call_llm(
+        self,
+        system_prompt: str,
+        user_message: str,
+        history: list[dict] = None,
+        conversation_id: Optional[str] = None,
+        iteration: int = 0
+    ) -> str:
+        """
+        Call the LLM with the given prompts.
+        
+        Args:
+            system_prompt: System prompt to send
+            user_message: Current user message
+            history: Previous conversation history
+            conversation_id: Optional conversation ID for logging
+            iteration: Current iteration number in agent loop (for logging)
+        """
         messages = []
         
         if history:
@@ -74,6 +93,12 @@ class Agent:
         
         messages.append({"role": "user", "content": user_message})
         
+        # Prepare full message list for logging (includes system prompt)
+        full_messages_for_log = []
+        response_text = ""
+        response_metadata = {}
+        error = None
+        
         if self.settings.llm_provider == "openai":
             # Final safety check: ensure no "agent" roles before API call
             # Create a completely new list with all roles properly mapped
@@ -86,6 +111,9 @@ class Agent:
                     role = "assistant"
                 safe_messages.append({"role": role, "content": msg.get("content", "")})
             
+            # Store full message list for logging
+            full_messages_for_log = safe_messages.copy()
+            
             try:
                 response = self.llm.chat.completions.create(
                     model=self.settings.llm_model,
@@ -93,21 +121,96 @@ class Agent:
                     temperature=0.7,
                     max_tokens=2000
                 )
-                return response.choices[0].message.content
+                response_text = response.choices[0].message.content
+                # Extract metadata
+                response_metadata = {
+                    "finish_reason": response.choices[0].finish_reason,
+                    "usage": {
+                        "prompt_tokens": response.usage.prompt_tokens if response.usage else None,
+                        "completion_tokens": response.usage.completion_tokens if response.usage else None,
+                        "total_tokens": response.usage.total_tokens if response.usage else None
+                    }
+                }
             except Exception as e:
+                error = str(e)
                 print(f"ERROR in OpenAI API call: {e}")
                 print(f"Messages that caused error: {[(i, m.get('role')) for i, m in enumerate(safe_messages)]}")
+                # Log the error before raising
+                try:
+                    self.llm_log_store.log_request(
+                        conversation_id=conversation_id,
+                        iteration=iteration,
+                        provider="openai",
+                        model=self.settings.llm_model,
+                        system_prompt=system_prompt,
+                        messages=full_messages_for_log,
+                        response="",
+                        response_metadata={},
+                        error=error
+                    )
+                except Exception as log_error:
+                    print(f"Warning: Failed to log LLM error: {log_error}")
                 raise
         elif self.settings.llm_provider == "anthropic":
-            response = self.llm.messages.create(
-                model=self.settings.llm_model,
-                system=system_prompt,
-                messages=messages,
-                max_tokens=2000
-            )
-            return response.content[0].text
+            # For Anthropic, system prompt is separate
+            full_messages_for_log = messages.copy()
+            
+            try:
+                response = self.llm.messages.create(
+                    model=self.settings.llm_model,
+                    system=system_prompt,
+                    messages=messages,
+                    max_tokens=2000
+                )
+                response_text = response.content[0].text
+                # Extract metadata
+                response_metadata = {
+                    "stop_reason": response.stop_reason,
+                    "usage": {
+                        "input_tokens": response.usage.input_tokens if response.usage else None,
+                        "output_tokens": response.usage.output_tokens if response.usage else None
+                    }
+                }
+            except Exception as e:
+                error = str(e)
+                print(f"ERROR in Anthropic API call: {e}")
+                # Log the error before raising
+                try:
+                    self.llm_log_store.log_request(
+                        conversation_id=conversation_id,
+                        iteration=iteration,
+                        provider="anthropic",
+                        model=self.settings.llm_model,
+                        system_prompt=system_prompt,
+                        messages=full_messages_for_log,
+                        response="",
+                        response_metadata={},
+                        error=error
+                    )
+                except Exception as log_error:
+                    print(f"Warning: Failed to log LLM error: {log_error}")
+                raise
+        else:
+            raise ValueError(f"Unknown LLM provider: {self.settings.llm_provider}")
         
-        raise ValueError(f"Unknown LLM provider: {self.settings.llm_provider}")
+        # Log successful request
+        try:
+            self.llm_log_store.log_request(
+                conversation_id=conversation_id,
+                iteration=iteration,
+                provider=self.settings.llm_provider,
+                model=self.settings.llm_model,
+                system_prompt=system_prompt,
+                messages=full_messages_for_log,
+                response=response_text,
+                response_metadata=response_metadata,
+                error=error
+            )
+        except Exception as log_error:
+            # Don't fail the request if logging fails
+            print(f"Warning: Failed to log LLM request: {log_error}")
+        
+        return response_text
     
     def _parse_response(self, response: str) -> AgentResponse:
         """Parse the LLM response to extract structured output."""
@@ -215,7 +318,13 @@ class Agent:
         
         for i in range(max_iterations):
             # Get LLM response
-            response_text = self._call_llm(system_prompt, current_prompt, history)
+            response_text = self._call_llm(
+                system_prompt,
+                current_prompt,
+                history,
+                conversation_id=conversation_id,
+                iteration=i
+            )
             
             # Parse response
             response = self._parse_response(response_text)
