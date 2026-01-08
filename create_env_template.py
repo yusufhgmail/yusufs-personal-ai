@@ -3,10 +3,11 @@
 Create .env template file with OpenAI key pre-filled
 """
 
+import os
 from pathlib import Path
 
-# OpenAI key provided by user
-OPENAI_KEY = "YOUR_OPENAI_API_KEY_HERE"
+# OpenAI key - set via environment variable or user input
+OPENAI_KEY = os.getenv("OPENAI_API_KEY", "")
 
 env_content = f"""# LLM Configuration
 LLM_PROVIDER=openai

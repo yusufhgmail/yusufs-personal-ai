@@ -18,12 +18,10 @@ def create_env_file():
     print("=" * 60)
     print()
     
-    # OpenAI key - prompt user for it
-    print("OpenAI API Key:")
-    print("1. Go to https://platform.openai.com/api-keys")
-    print("2. Create a new API key")
-    print()
-    openai_key = input("Enter your OpenAI API key (or press Enter to skip): ").strip()
+    # OpenAI key - get from environment or prompt user
+    openai_key = os.getenv("OPENAI_API_KEY", "").strip()
+    if not openai_key:
+        openai_key = input("Enter OpenAI API key: ").strip()
     
     print("[OK] OpenAI API key provided")
     print()

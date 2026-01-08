@@ -166,30 +166,16 @@ class Agent:
         if conversation_id is None:
             conversation_id = self.interactions_store.create_conversation_id()
         
-        # Retrieve conversation history from previous messages (before adding current message)
-        previous_interactions = self.interactions_store.get_conversation(conversation_id)
-        
         # Log the user message
         self.interactions_store.add_message(conversation_id, "user", task)
-        
-        # Convert previous interactions to LLM message format
-        # This includes all messages from before the current one
-        conversation_history = []
-        for interaction in previous_interactions:
-            # Map 'agent' role to 'assistant' for LLM compatibility
-            role = "assistant" if interaction.role == "agent" else "user"
-            conversation_history.append({
-                "role": role,
-                "content": interaction.content
-            })
         
         # Build prompts
         tool_descriptions = self.tool_registry.get_descriptions()
         system_prompt = self.prompt_builder.build_system_prompt(tool_descriptions)
         task_prompt = self.prompt_builder.build_task_prompt(task)
         
-        # Agent loop - start with conversation history
-        history = conversation_history.copy()
+        # Agent loop
+        history = []
         current_prompt = task_prompt
         
         for i in range(max_iterations):
@@ -264,12 +250,7 @@ class Agent:
         
         # Check if it's an approval
         if feedback.lower().strip() in ["send it", "looks good", "approved", "yes", "ok", "okay"]:
-            # Continue the conversation to actually send/save the approved draft
-            return self.run(
-                "The user has approved the draft. Please proceed to send the email or save the document now. "
-                "Look at the previous messages to find the draft_id or content that was approved.",
-                conversation_id=conversation_id
-            )
+            return "Got it! I'll proceed with sending/saving this."
         
         # Otherwise, it's an edit or correction - continue the conversation
         return self.run(

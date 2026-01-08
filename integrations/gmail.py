@@ -64,7 +64,8 @@ class GmailClient:
     def _authenticate(self):
         """Authenticate with Gmail API using OAuth2."""
         creds = None
-        token_path = "config/gmail_token.json"
+        # Get token path, creating from base64 if needed
+        token_path = self.settings.get_token_path("gmail_token.json", self.settings.gmail_token_base64)
         
         # Load existing credentials
         if os.path.exists(token_path):
@@ -75,13 +76,14 @@ class GmailClient:
             if creds and creds.expired and creds.refresh_token:
                 creds.refresh(Request())
             else:
-                if not os.path.exists(self.settings.google_credentials_path):
+                creds_path = self.settings.get_google_credentials_path()
+                if not os.path.exists(creds_path):
                     raise FileNotFoundError(
-                        f"Google credentials file not found at {self.settings.google_credentials_path}. "
-                        "Please download OAuth2 credentials from Google Cloud Console."
+                        f"Google credentials file not found at {creds_path}. "
+                        "Please download OAuth2 credentials from Google Cloud Console or set GOOGLE_CREDENTIALS_BASE64."
                     )
                 flow = InstalledAppFlow.from_client_secrets_file(
-                    self.settings.google_credentials_path, SCOPES
+                    creds_path, SCOPES
                 )
                 creds = flow.run_local_server(port=0)
             

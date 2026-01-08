@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Update .env file with Discord bot token"""
 
+import os
 from pathlib import Path
 
-DISCORD_BOT_TOKEN = "YOUR_DISCORD_BOT_TOKEN_HERE"
+DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN", "")
 
 # Read existing .env
 env_path = Path(".env")
