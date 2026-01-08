@@ -64,18 +64,40 @@ class Agent:
         messages = []
         
         if history:
-            messages.extend(history)
+            # Ensure all roles are valid (map "agent" to "assistant" if any slipped through)
+            # Create new dicts to avoid any reference issues
+            for msg in history:
+                role = msg.get("role", "user")
+                if role == "agent":
+                    role = "assistant"
+                messages.append({"role": role, "content": msg.get("content", "")})
         
         messages.append({"role": "user", "content": user_message})
         
         if self.settings.llm_provider == "openai":
-            response = self.llm.chat.completions.create(
-                model=self.settings.llm_model,
-                messages=[{"role": "system", "content": system_prompt}] + messages,
-                temperature=0.7,
-                max_tokens=2000
-            )
-            return response.choices[0].message.content
+            # Final safety check: ensure no "agent" roles before API call
+            # Create a completely new list with all roles properly mapped
+            system_msg = {"role": "system", "content": system_prompt}
+            safe_messages = [system_msg]
+            for msg in messages:
+                role = msg.get("role", "user")
+                # Map "agent" to "assistant" - this is the critical fix
+                if role == "agent":
+                    role = "assistant"
+                safe_messages.append({"role": role, "content": msg.get("content", "")})
+            
+            try:
+                response = self.llm.chat.completions.create(
+                    model=self.settings.llm_model,
+                    messages=safe_messages,
+                    temperature=0.7,
+                    max_tokens=2000
+                )
+                return response.choices[0].message.content
+            except Exception as e:
+                print(f"ERROR in OpenAI API call: {e}")
+                print(f"Messages that caused error: {[(i, m.get('role')) for i, m in enumerate(safe_messages)]}")
+                raise
         elif self.settings.llm_provider == "anthropic":
             response = self.llm.messages.create(
                 model=self.settings.llm_model,
@@ -166,7 +188,21 @@ class Agent:
         if conversation_id is None:
             conversation_id = self.interactions_store.create_conversation_id()
         
-        # Log the user message
+        # Load previous conversation history (before adding current message)
+        prev_interactions = self.interactions_store.get_conversation(conversation_id)
+        
+        # Convert previous interactions to history format
+        # Note: Observations from tool executions are not stored, only user/agent messages
+        # Map "agent" role to "assistant" for LLM API compatibility
+        history = []
+        for interaction in prev_interactions:
+            role = interaction.role
+            # Map "agent" to "assistant" for LLM API (which expects "assistant" not "agent")
+            if role == "agent":
+                role = "assistant"
+            history.append({"role": role, "content": interaction.content})
+        
+        # Log the current user message (this will be included in next run's history)
         self.interactions_store.add_message(conversation_id, "user", task)
         
         # Build prompts
@@ -175,7 +211,6 @@ class Agent:
         task_prompt = self.prompt_builder.build_task_prompt(task)
         
         # Agent loop
-        history = []
         current_prompt = task_prompt
         
         for i in range(max_iterations):
