@@ -1,0 +1,10 @@
+---
+alwaysApply: true
+---
+
+Always use the VISION.md and TODO.md documents as core context for understanding
+what we are trying to build. When you receive instructions or tasks, 
+ensure the requested changes are aligned with the vision.
+
+- If anything seems misaligned or unclear, ask me for clarification before proceeding.
+- Never edit VISION.md or TODO.md unless I have explicitly instructed you to do so, or before checking with me.
