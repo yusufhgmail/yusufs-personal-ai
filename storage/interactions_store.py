@@ -67,14 +67,16 @@ class InteractionsStore:
         )
     
     def get_conversation(self, conversation_id: str) -> list[Interaction]:
-        """Get all messages in a conversation, ordered by time."""
+        """Get the last 20 messages in a conversation, ordered by time."""
         response = self.client.table(self.table)\
             .select("*")\
             .eq("conversation_id", conversation_id)\
-            .order("created_at")\
+            .order("created_at", desc=True)\
+            .limit(20)\
             .execute()
         
-        return [
+        # Convert to Interaction objects
+        interactions = [
             Interaction(
                 id=row["id"],
                 conversation_id=row["conversation_id"],
@@ -85,6 +87,11 @@ class InteractionsStore:
             )
             for row in response.data
         ]
+        
+        # Reverse to maintain chronological order (oldest to newest)
+        interactions.reverse()
+        
+        return interactions
     
     def get_recent_conversations(self, limit: int = 10) -> list[str]:
         """Get IDs of recent conversations."""
