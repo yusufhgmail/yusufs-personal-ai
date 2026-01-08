@@ -20,7 +20,7 @@
 
 ## Queue Next
 
-- [ ] 
+- [ ] Sometimes the AI seems to get confused, as if the order of the messages are wrong somehow: https://drive.google.com/file/d/1DAy4M6pTscSA7VK8-whMSPkpKENH0S5S/view?usp=drivesdk, https://drive.google.com/file/d/1AqOqSfG3AL-5hXapX7HGIgBTDb2JoK3T/view?usp=drivesdk, https://drive.google.com/file/d/1XVYlXGW7XQ3XWexUeIETqXLDruWTMPWR/view?usp=drivesdk 
 
 ---
 
