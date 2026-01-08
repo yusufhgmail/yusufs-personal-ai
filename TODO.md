@@ -10,6 +10,7 @@
   - [x] Find email from miguel
   - [x] Download attachment
   - [ ] Edit attachment (maybe by converting to Google Docs, not sure)
+    - [ ] Make sure memory works (before I start editing the attachment - so it learns about me while I edit before I make the edits)
 
 ---
 
