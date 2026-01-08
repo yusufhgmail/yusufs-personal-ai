@@ -153,7 +153,8 @@ class Agent:
                 raise
         elif self.settings.llm_provider == "anthropic":
             # For Anthropic, system prompt is separate
-            full_messages_for_log = messages.copy()
+            # Include system prompt in messages for logging consistency
+            full_messages_for_log = [{"role": "system", "content": system_prompt}] + messages.copy()
             
             try:
                 response = self.llm.messages.create(
@@ -193,7 +194,7 @@ class Agent:
         else:
             raise ValueError(f"Unknown LLM provider: {self.settings.llm_provider}")
         
-        # Log successful request
+        # Log successful request (non-blocking - don't fail if logging fails)
         try:
             self.llm_log_store.log_request(
                 conversation_id=conversation_id,
@@ -207,8 +208,10 @@ class Agent:
                 error=error
             )
         except Exception as log_error:
-            # Don't fail the request if logging fails
+            # Don't fail the request if logging fails - just log the error
+            import traceback
             print(f"Warning: Failed to log LLM request: {log_error}")
+            print(f"Logging error details: {traceback.format_exc()}")
         
         return response_text
     
