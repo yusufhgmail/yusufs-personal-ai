@@ -47,10 +47,11 @@ class Email:
 @dataclass
 class Attachment:
     """Represents an email attachment."""
-    id: str
+    id: str  # attachmentId (may be empty for inline attachments)
     filename: str
     mime_type: str
     size: int
+    inline_data: Optional[str] = None  # base64 data if inline attachment
 
 
 class GmailClient:
@@ -219,7 +220,8 @@ class GmailClient:
                         id=part['body'].get('attachmentId', ''),
                         filename=part['filename'],
                         mime_type=part['mimeType'],
-                        size=part['body'].get('size', 0)
+                        size=part['body'].get('size', 0),
+                        inline_data=part['body'].get('data')  # Capture inline data if present
                     ))
                 if 'parts' in part:
                     attachments.extend(self._extract_attachments(part))
@@ -228,7 +230,7 @@ class GmailClient:
     
     def download_attachment(self, message_id: str, attachment_id: str) -> bytes:
         """
-        Download an attachment.
+        Download an attachment by attachment ID.
         
         Args:
             message_id: The Gmail message ID
@@ -244,6 +246,49 @@ class GmailClient:
         ).execute()
         
         return base64.urlsafe_b64decode(attachment['data'])
+    
+    def get_attachment_data(self, message_id: str, filename: str) -> tuple[bytes, str]:
+        """
+        Download attachment data by filename.
+        Handles both regular attachments (via API) and inline attachments (embedded data).
+        
+        Args:
+            message_id: The Gmail message ID
+            filename: The filename of the attachment to download
+            
+        Returns:
+            Tuple of (attachment data as bytes, mime_type)
+            
+        Raises:
+            ValueError: If email or attachment not found, or if attachment has no data
+        """
+        # Fetch the full email
+        email = self.read_email(message_id)
+        if not email:
+            raise ValueError(f"Email not found: {message_id}")
+        
+        # Find attachment by filename
+        attachment = None
+        for att in email.attachments:
+            if att.filename == filename:
+                attachment = att
+                break
+        
+        if not attachment:
+            # List available attachments for better error message
+            available = [att.filename for att in email.attachments]
+            raise ValueError(f"Attachment not found: '{filename}'. Available attachments: {available}")
+        
+        # Try inline data first (if present)
+        if attachment.inline_data:
+            return base64.urlsafe_b64decode(attachment.inline_data), attachment.mime_type
+        
+        # Otherwise use API call (validate ID first)
+        if not attachment.id:
+            raise ValueError(f"Attachment has no ID or inline data: '{filename}'")
+        
+        data = self.download_attachment(message_id, attachment.id)
+        return data, attachment.mime_type
     
     def create_draft(self, to: str, subject: str, body: str, 
                      reply_to_message_id: Optional[str] = None) -> str:

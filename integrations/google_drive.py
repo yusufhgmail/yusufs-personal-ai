@@ -307,6 +307,102 @@ class GoogleDriveClient:
             print(f"Error converting to Google Doc: {e}")
             return None
     
+    def list_folders(self, parent_id: Optional[str] = None, max_results: int = 50) -> list[DriveFile]:
+        """
+        List folders in Google Drive.
+        
+        Args:
+            parent_id: Optional parent folder ID to list folders within.
+                       If None, lists folders in root/accessible folders.
+            max_results: Maximum number of results
+            
+        Returns:
+            List of DriveFile objects (folders only)
+        """
+        query = "mimeType='application/vnd.google-apps.folder' and trashed=false"
+        if parent_id:
+            query += f" and '{parent_id}' in parents"
+        
+        try:
+            results = self.service.files().list(
+                q=query,
+                pageSize=max_results,
+                fields="files(id, name, mimeType, createdTime, modifiedTime, webViewLink)"
+            ).execute()
+            
+            files = results.get('files', [])
+            return [
+                DriveFile(
+                    id=f['id'],
+                    name=f['name'],
+                    mime_type=f['mimeType'],
+                    created_time=f.get('createdTime'),
+                    modified_time=f.get('modifiedTime'),
+                    web_view_link=f.get('webViewLink')
+                )
+                for f in files
+            ]
+        except Exception as e:
+            print(f"Error listing folders: {e}")
+            return []
+    
+    def find_or_create_folder(self, name: str, parent_id: Optional[str] = None) -> Optional[DriveFile]:
+        """
+        Find a folder by name or create it if it doesn't exist.
+        
+        Args:
+            name: Folder name to find or create
+            parent_id: Optional parent folder ID
+            
+        Returns:
+            DriveFile object for the folder
+        """
+        # Search for existing folder with this name
+        query = f"mimeType='application/vnd.google-apps.folder' and name='{name}' and trashed=false"
+        if parent_id:
+            query += f" and '{parent_id}' in parents"
+        
+        try:
+            results = self.service.files().list(
+                q=query,
+                pageSize=1,
+                fields="files(id, name, mimeType, webViewLink)"
+            ).execute()
+            
+            files = results.get('files', [])
+            if files:
+                # Folder exists, return it
+                f = files[0]
+                return DriveFile(
+                    id=f['id'],
+                    name=f['name'],
+                    mime_type=f['mimeType'],
+                    web_view_link=f.get('webViewLink')
+                )
+            
+            # Folder doesn't exist, create it
+            file_metadata = {
+                'name': name,
+                'mimeType': 'application/vnd.google-apps.folder'
+            }
+            if parent_id:
+                file_metadata['parents'] = [parent_id]
+            
+            f = self.service.files().create(
+                body=file_metadata,
+                fields='id, name, mimeType, webViewLink'
+            ).execute()
+            
+            return DriveFile(
+                id=f['id'],
+                name=f['name'],
+                mime_type=f['mimeType'],
+                web_view_link=f.get('webViewLink')
+            )
+        except Exception as e:
+            print(f"Error finding/creating folder: {e}")
+            return None
+    
     def delete_file(self, file_id: str) -> bool:
         """Delete a file."""
         try:

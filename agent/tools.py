@@ -125,32 +125,34 @@ def create_default_registry(gmail_client=None, drive_client=None) -> ToolRegistr
         message_id = registry._gmail_client.send_draft(draft_id)
         return f"Email sent successfully! Message ID: {message_id}"
     
-    def download_attachment(email_id: str, attachment_id: str, filename: str) -> str:
-        """Download an email attachment and save to Drive."""
+    def download_attachment(email_id: str, filename: str, folder_id: Optional[str] = None) -> str:
+        """Download an email attachment by filename and save to Google Drive."""
         if registry._gmail_client is None:
             return f"[Gmail not configured] Would download attachment from email: {email_id}"
         
-        # Download the attachment
-        data = registry._gmail_client.download_attachment(email_id, attachment_id)
-        
         if registry._drive_client is None:
-            return f"Downloaded attachment ({len(data)} bytes) but Drive not configured to save it"
+            return f"[Google Drive not configured] Cannot save attachment"
         
-        # Determine mime type from filename
-        import mimetypes
-        mime_type, _ = mimetypes.guess_type(filename)
-        if not mime_type:
-            mime_type = 'application/octet-stream'
+        try:
+            # Download the attachment using filename-based lookup
+            # This handles both regular and inline attachments internally
+            data, mime_type = registry._gmail_client.get_attachment_data(email_id, filename)
+        except ValueError as e:
+            return f"Error downloading attachment: {str(e)}"
+        except Exception as e:
+            return f"Unexpected error downloading attachment: {str(e)}"
         
-        # Upload to Drive
+        # Upload to Drive (with optional folder)
         result = registry._drive_client.upload_file(
             name=filename,
             content=data,
-            mime_type=mime_type
+            mime_type=mime_type,
+            folder_id=folder_id
         )
         
         if result:
-            return f"Saved attachment to Drive:\n- Name: {result.name}\n- ID: {result.id}\n- Link: {result.web_view_link}"
+            folder_info = f" (in folder)" if folder_id else ""
+            return f"Saved attachment to Drive{folder_info}:\n- Name: {result.name}\n- ID: {result.id}\n- Link: {result.web_view_link}"
         return "Failed to save attachment to Drive"
     
     # Register tools
@@ -212,16 +214,16 @@ def create_default_registry(gmail_client=None, drive_client=None) -> ToolRegistr
     
     registry.register(Tool(
         name="download_attachment",
-        description="Download an email attachment and save it to Google Drive",
+        description="Download an email attachment by filename and save it to Google Drive. Use the exact filename shown when reading the email.",
         func=download_attachment,
         parameters={
             "type": "object",
             "properties": {
                 "email_id": {"type": "string", "description": "The email ID containing the attachment"},
-                "attachment_id": {"type": "string", "description": "The attachment ID"},
-                "filename": {"type": "string", "description": "The filename to save as"}
+                "filename": {"type": "string", "description": "The exact filename of the attachment to download"},
+                "folder_id": {"type": "string", "description": "Optional: Google Drive folder ID to save the file to. Use list_drive_folders to find folder IDs."}
             },
-            "required": ["email_id", "attachment_id", "filename"]
+            "required": ["email_id", "filename"]
         }
     ))
     
@@ -309,6 +311,28 @@ def create_default_registry(gmail_client=None, drive_client=None) -> ToolRegistr
             return f"Converted to Google Doc: {result.name}\nID: {result.id}\nLink: {result.web_view_link}"
         return "Failed to convert file to Google Doc"
     
+    def list_drive_folders(parent_folder_id: Optional[str] = None) -> str:
+        """List folders in Google Drive to help find the right destination for files."""
+        if registry._drive_client is None:
+            return "[Google Drive not configured]"
+        
+        folders = registry._drive_client.list_folders(parent_id=parent_folder_id)
+        
+        if not folders:
+            if parent_folder_id:
+                return "No subfolders found in the specified folder."
+            return "No folders found in Google Drive."
+        
+        location = "in the specified folder" if parent_folder_id else "in Google Drive"
+        result = f"Found {len(folders)} folder(s) {location}:\n\n"
+        for folder in folders:
+            result += f"- **{folder.name}**\n"
+            result += f"  ID: {folder.id}\n"
+            if folder.web_view_link:
+                result += f"  Link: {folder.web_view_link}\n"
+            result += "\n"
+        return result
+    
     # Register Drive tools
     registry.register(Tool(
         name="search_drive_files",
@@ -376,6 +400,19 @@ def create_default_registry(gmail_client=None, drive_client=None) -> ToolRegistr
                 "file_id": {"type": "string", "description": "The ID of the file to convert"}
             },
             "required": ["file_id"]
+        }
+    ))
+    
+    registry.register(Tool(
+        name="list_drive_folders",
+        description="List folders in Google Drive. Use this to find folder IDs for saving attachments or files to specific locations.",
+        func=list_drive_folders,
+        parameters={
+            "type": "object",
+            "properties": {
+                "parent_folder_id": {"type": "string", "description": "Optional: ID of a parent folder to list subfolders of. If not provided, lists top-level accessible folders."}
+            },
+            "required": []
         }
     ))
     
