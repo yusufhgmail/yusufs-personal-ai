@@ -68,7 +68,8 @@ class Agent:
         user_message: str,
         history: list[dict] = None,
         conversation_id: Optional[str] = None,
-        iteration: int = 0
+        iteration: int = 0,
+        original_user_message: Optional[str] = None
     ) -> str:
         """
         Call the LLM with the given prompts.
@@ -79,6 +80,7 @@ class Agent:
             history: Previous conversation history
             conversation_id: Optional conversation ID for logging
             iteration: Current iteration number in agent loop (for logging)
+            original_user_message: The original user request (for logging/debugging)
         """
         messages = []
         
@@ -146,7 +148,8 @@ class Agent:
                         messages=full_messages_for_log,
                         response="",
                         response_metadata={},
-                        error=error
+                        error=error,
+                        original_user_message=original_user_message
                     )
                 except Exception as log_error:
                     print(f"Warning: Failed to log LLM error: {log_error}")
@@ -186,7 +189,8 @@ class Agent:
                         messages=full_messages_for_log,
                         response="",
                         response_metadata={},
-                        error=error
+                        error=error,
+                        original_user_message=original_user_message
                     )
                 except Exception as log_error:
                     print(f"Warning: Failed to log LLM error: {log_error}")
@@ -205,7 +209,8 @@ class Agent:
                 messages=full_messages_for_log,
                 response=response_text,
                 response_metadata=response_metadata,
-                error=error
+                error=error,
+                original_user_message=original_user_message
             )
         except Exception as log_error:
             # Don't fail the request if logging fails - just log the error
@@ -317,6 +322,8 @@ class Agent:
         task_prompt = self.prompt_builder.build_task_prompt(task)
         
         # Agent loop
+        # Track the original user task to preserve it across iterations
+        original_user_task = task_prompt
         current_prompt = task_prompt
         
         for i in range(max_iterations):
@@ -326,7 +333,8 @@ class Agent:
                 current_prompt,
                 history,
                 conversation_id=conversation_id,
-                iteration=i
+                iteration=i,
+                original_user_message=task  # Pass original message for logging
             )
             
             # Parse response
@@ -359,13 +367,24 @@ class Agent:
                 except Exception as e:
                     observation = f"OBSERVATION: Error executing {response.action_name}: {str(e)}"
                 
-                # Add to history and continue
+                # CRITICAL FIX: Preserve the original user message in history
+                # After the first iteration, add the original user message so it's not lost
+                if i == 0:
+                    history.append({"role": "user", "content": original_user_task})
+                
+                # Add action and observation to history
                 history.append({"role": "assistant", "content": response_text})
                 history.append({"role": "user", "content": observation})
-                current_prompt = observation
+                
+                # Use a continuation prompt that references the observation
+                # instead of just the observation (which would cause it to be duplicated)
+                current_prompt = f"The tool returned the above observation. Continue with your original task. Remember to provide a FINAL_ANSWER when you have enough information."
             
             else:
                 # Thought without action - prompt for next step
+                # Also preserve user message if this is the first iteration
+                if i == 0:
+                    history.append({"role": "user", "content": original_user_task})
                 history.append({"role": "assistant", "content": response_text})
                 # Be more explicit about what we need
                 current_prompt = "You need to either:\n1. Use a tool (respond with ACTION: tool_name and ACTION_INPUT: {{...}})\n2. Provide a final answer (respond with FINAL_ANSWER: your answer)\n\nPlease choose one and respond in the correct format."

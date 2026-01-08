@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS llm_logs (
     response TEXT NOT NULL,
     response_metadata JSONB DEFAULT '{}',
     error TEXT,
+    original_user_message TEXT,  -- The actual user request that started this agent run
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -23,5 +24,16 @@ BEGIN
     
     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_llm_logs_created') THEN
         CREATE INDEX idx_llm_logs_created ON llm_logs(created_at DESC);
+    END IF;
+END $$;
+
+-- Migration: Add original_user_message column if it doesn't exist (for existing installations)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'llm_logs' AND column_name = 'original_user_message'
+    ) THEN
+        ALTER TABLE llm_logs ADD COLUMN original_user_message TEXT;
     END IF;
 END $$;
