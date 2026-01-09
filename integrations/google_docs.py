@@ -212,14 +212,30 @@ class GoogleDocsClient:
         Returns:
             True if successful, False otherwise
         """
+        # #region agent log
+        _debug_log("A,B", "google_docs.py:insert_at_beginning:entry", "Called insert_at_beginning", {"doc_id": document_id, "text_preview": text[:50]})
+        # #endregion
         try:
             doc = self.get_document(document_id)
             if not doc:
+                # #region agent log
+                _debug_log("D", "google_docs.py:insert_at_beginning:no_doc", "get_document returned None", {"doc_id": document_id})
+                # #endregion
                 return False
             
+            # #region agent log
+            _debug_log("B", "google_docs.py:insert_at_beginning:before_insert", "About to call insert_text", {"doc_id": document_id, "first_paragraph_index": doc.first_paragraph_index})
+            # #endregion
             # Use the first paragraph index for safe insertion
-            return self.insert_text(document_id, text, doc.first_paragraph_index)
+            result = self.insert_text(document_id, text, doc.first_paragraph_index)
+            # #region agent log
+            _debug_log("A", "google_docs.py:insert_at_beginning:after_insert", "insert_text returned", {"doc_id": document_id, "result": result})
+            # #endregion
+            return result
         except Exception as e:
+            # #region agent log
+            _debug_log("A", "google_docs.py:insert_at_beginning:error", "Exception", {"error": str(e)})
+            # #endregion
             print(f"Error inserting at beginning: {e}")
             return False
     
@@ -236,14 +252,23 @@ class GoogleDocsClient:
         Returns:
             True if successful, False otherwise
         """
+        # #region agent log
+        _debug_log("E", "google_docs.py:insert_after_text:entry", "Called insert_after_text", {"doc_id": document_id, "search_text_preview": search_text[:50] if search_text else None, "insert_text_preview": text_to_insert[:50] if text_to_insert else None})
+        # #endregion
         try:
             doc = self.get_document(document_id)
             if not doc:
+                # #region agent log
+                _debug_log("E", "google_docs.py:insert_after_text:no_doc", "get_document returned None", {"doc_id": document_id})
+                # #endregion
                 return False
             
             # Find the search text in the document
             body_text = doc.body_text
             position = body_text.find(search_text)
+            # #region agent log
+            _debug_log("E", "google_docs.py:insert_after_text:search", "Searched for text", {"found_position": position, "body_text_length": len(body_text)})
+            # #endregion
             
             if position == -1:
                 print(f"Could not find text: {search_text}")
