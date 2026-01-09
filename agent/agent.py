@@ -82,7 +82,8 @@ class Agent:
         history: list[dict] = None,
         conversation_id: Optional[str] = None,
         iteration: int = 0,
-        original_user_message: Optional[str] = None
+        original_user_message: Optional[str] = None,
+        current_task_brief: Optional[str] = None
     ) -> str:
         """
         Call the LLM with the given prompts.
@@ -94,6 +95,7 @@ class Agent:
             conversation_id: Optional conversation ID for logging
             iteration: Current iteration number in agent loop (for logging)
             original_user_message: The original user request (for logging/debugging)
+            current_task_brief: The active task brief (for logging)
         """
         messages = []
         
@@ -162,7 +164,8 @@ class Agent:
                         response="",
                         response_metadata={},
                         error=error,
-                        original_user_message=original_user_message
+                        original_user_message=original_user_message,
+                        current_task_brief=current_task_brief
                     )
                 except Exception as log_error:
                     print(f"Warning: Failed to log LLM error: {log_error}")
@@ -203,7 +206,8 @@ class Agent:
                         response="",
                         response_metadata={},
                         error=error,
-                        original_user_message=original_user_message
+                        original_user_message=original_user_message,
+                        current_task_brief=current_task_brief
                     )
                 except Exception as log_error:
                     print(f"Warning: Failed to log LLM error: {log_error}")
@@ -223,7 +227,8 @@ class Agent:
                 response=response_text,
                 response_metadata=response_metadata,
                 error=error,
-                original_user_message=original_user_message
+                original_user_message=original_user_message,
+                current_task_brief=current_task_brief
             )
         except Exception as log_error:
             # Don't fail the request if logging fails - just log the error
@@ -334,6 +339,13 @@ class Agent:
         # Log the current user message (this will be included in next run's history)
         self.interactions_store.add_message(conversation_id, "user", task)
         
+        # Get current task brief for logging (before building prompts)
+        current_task_brief = None
+        if user_id:
+            task_obj = self.active_task_store.get_active_task(user_id)
+            if task_obj:
+                current_task_brief = f"{task_obj.title}: {task_obj.brief}"
+        
         # Build prompts
         tool_descriptions = self.tool_registry.get_descriptions()
         system_prompt = self.prompt_builder.build_system_prompt(tool_descriptions, user_id=user_id)
@@ -345,6 +357,12 @@ class Agent:
         current_prompt = task_prompt
         
         for i in range(max_iterations):
+            # Refresh task brief for each iteration (it might change during tool calls)
+            if user_id:
+                task_obj = self.active_task_store.get_active_task(user_id)
+                if task_obj:
+                    current_task_brief = f"{task_obj.title}: {task_obj.brief}"
+            
             # Get LLM response
             response_text = self._call_llm(
                 system_prompt,
@@ -352,7 +370,8 @@ class Agent:
                 history,
                 conversation_id=conversation_id,
                 iteration=i,
-                original_user_message=task  # Pass original message for logging
+                original_user_message=task,
+                current_task_brief=current_task_brief
             )
             
             # Parse response

@@ -85,6 +85,43 @@ class ActiveTaskStore:
             updated_at=datetime.fromisoformat(row["updated_at"].replace("Z", "+00:00"))
         )
     
+    def append_instruction(self, user_id: str, instruction: str) -> Optional[ActiveTask]:
+        """
+        Append an instruction to the existing task brief.
+        
+        Args:
+            user_id: The user ID (Discord user ID)
+            instruction: New instruction to append to the brief
+            
+        Returns:
+            The updated ActiveTask, or None if no task exists
+        """
+        # Get existing task
+        existing = self.get_active_task(user_id)
+        if not existing:
+            return None
+        
+        # Append the new instruction
+        new_brief = f"{existing.brief}\n\n**Additional instruction:** {instruction}"
+        
+        # Update the task
+        response = self.client.table(self.table).update(
+            {"brief": new_brief}
+        ).eq("user_id", user_id).execute()
+        
+        if not response.data:
+            return None
+        
+        row = response.data[0]
+        return ActiveTask(
+            id=row["id"],
+            user_id=row["user_id"],
+            title=row["title"],
+            brief=row["brief"],
+            created_at=datetime.fromisoformat(row["created_at"].replace("Z", "+00:00")),
+            updated_at=datetime.fromisoformat(row["updated_at"].replace("Z", "+00:00"))
+        )
+    
     def get_task_as_text(self, user_id: str) -> Optional[str]:
         """
         Get the active task formatted as text for inclusion in prompts.
