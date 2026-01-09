@@ -342,9 +342,12 @@ class Agent:
         # Get current task brief for logging (before building prompts)
         current_task_brief = None
         if user_id:
-            task_obj = self.active_task_store.get_active_task(user_id)
-            if task_obj:
-                current_task_brief = f"{task_obj.title}: {task_obj.brief}"
+            try:
+                task_obj = self.active_task_store.get_active_task(user_id)
+                if task_obj:
+                    current_task_brief = f"{task_obj.title}: {task_obj.brief}"
+            except Exception as e:
+                print(f"Warning: Could not get active task for logging: {e}")
         
         # Build prompts
         tool_descriptions = self.tool_registry.get_descriptions()
@@ -359,9 +362,12 @@ class Agent:
         for i in range(max_iterations):
             # Refresh task brief for each iteration (it might change during tool calls)
             if user_id:
-                task_obj = self.active_task_store.get_active_task(user_id)
-                if task_obj:
-                    current_task_brief = f"{task_obj.title}: {task_obj.brief}"
+                try:
+                    task_obj = self.active_task_store.get_active_task(user_id)
+                    if task_obj:
+                        current_task_brief = f"{task_obj.title}: {task_obj.brief}"
+                except Exception as e:
+                    pass  # Already logged above, don't spam
             
             # Get LLM response
             response_text = self._call_llm(
