@@ -249,12 +249,10 @@ def create_default_registry(gmail_client=None, drive_client=None, docs_client=No
     # Google Drive tools
     def search_files(query: str, max_results: int = 10) -> str:
         """Search for files in Google Drive."""
-        print(f"[TOOL CALLED] search_files with query: {query}")
         if registry._drive_client is None:
             return f"[Google Drive not configured] Would search for: {query}"
         
         files = registry._drive_client.search_files(query, max_results)
-        print(f"[TOOL RESULT] search_files found {len(files)} files")
         if not files:
             return "No files found matching your query."
         
@@ -334,12 +332,10 @@ def create_default_registry(gmail_client=None, drive_client=None, docs_client=No
     
     def list_drive_folders(parent_folder_id: Optional[str] = None) -> str:
         """List folders in Google Drive to help find the right destination for files."""
-        print(f"[TOOL CALLED] list_drive_folders with parent: {parent_folder_id}")
         if registry._drive_client is None:
             return "[Google Drive not configured]"
         
         folders = registry._drive_client.list_folders(parent_id=parent_folder_id)
-        print(f"[TOOL RESULT] list_drive_folders found {len(folders)} folders")
         
         if not folders:
             if parent_folder_id:

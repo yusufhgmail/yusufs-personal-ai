@@ -1,0 +1,5 @@
+---
+alwaysApply: true
+---
+
+We have connected Railway to Github and pushes are being auto-deployed. No need to use Railway Up command unless there's a specific reason to do so.
