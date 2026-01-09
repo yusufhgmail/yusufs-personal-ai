@@ -22,6 +22,7 @@ class ToolRegistry:
         self.tools: dict[str, Tool] = {}
         self._gmail_client = None
         self._drive_client = None
+        self._docs_client = None
         self._facts_store = None
     
     def set_gmail_client(self, client):
@@ -31,6 +32,10 @@ class ToolRegistry:
     def set_drive_client(self, client):
         """Set the Google Drive client for file tools."""
         self._drive_client = client
+    
+    def set_docs_client(self, client):
+        """Set the Google Docs client for document editing tools."""
+        self._docs_client = client
     
     def set_facts_store(self, store: FactsStore):
         """Set the facts store for memory tools."""
@@ -66,7 +71,7 @@ class ToolRegistry:
 
 
 # Create default tool registry
-def create_default_registry(gmail_client=None, drive_client=None, facts_store=None) -> ToolRegistry:
+def create_default_registry(gmail_client=None, drive_client=None, docs_client=None, facts_store=None) -> ToolRegistry:
     """Create a tool registry with default tools."""
     registry = ToolRegistry()
     
@@ -74,6 +79,8 @@ def create_default_registry(gmail_client=None, drive_client=None, facts_store=No
         registry.set_gmail_client(gmail_client)
     if drive_client:
         registry.set_drive_client(drive_client)
+    if docs_client:
+        registry.set_docs_client(docs_client)
     
     # Initialize facts store (create one if not provided)
     if facts_store is None:
@@ -425,6 +432,104 @@ def create_default_registry(gmail_client=None, drive_client=None, facts_store=No
                 "parent_folder_id": {"type": "string", "description": "Optional: ID of a parent folder to list subfolders of. If not provided, lists top-level accessible folders."}
             },
             "required": []
+        }
+    ))
+    
+    # Google Docs editing tools
+    def get_doc_structure(document_id: str) -> str:
+        """Get the document structure with character indices for precise editing."""
+        if registry._docs_client is None:
+            return f"[Google Docs not configured] Would get structure of: {document_id}"
+        
+        doc = registry._docs_client.get_document(document_id)
+        if not doc:
+            return f"Could not find document with ID: {document_id}"
+        
+        result = f"**{doc.title}** (Document ID: {doc.document_id})\n\n"
+        result += "**Content with indices** (use these indices for editing):\n\n"
+        
+        for segment in doc.segments:
+            # Show the text with its index range
+            text_preview = segment.text.replace('\n', '\\n')
+            result += f"[{segment.start_index}-{segment.end_index}] \"{text_preview}\"\n"
+        
+        result += f"\n**End index**: {doc.end_index} (use for appending)\n"
+        return result
+    
+    def edit_google_doc(document_id: str, action: str, text: Optional[str] = None, 
+                        index: Optional[int] = None, start_index: Optional[int] = None, 
+                        end_index: Optional[int] = None, find_text: Optional[str] = None, 
+                        replace_text: Optional[str] = None) -> str:
+        """Edit a Google Doc using various actions."""
+        if registry._docs_client is None:
+            return f"[Google Docs not configured] Would edit document: {document_id}"
+        
+        if action == "insert":
+            if text is None or index is None:
+                return "Error: 'insert' action requires 'text' and 'index' parameters"
+            success = registry._docs_client.insert_text(document_id, text, index)
+            if success:
+                return f"Successfully inserted text at index {index}"
+            return "Failed to insert text"
+        
+        elif action == "delete":
+            if start_index is None or end_index is None:
+                return "Error: 'delete' action requires 'start_index' and 'end_index' parameters"
+            success = registry._docs_client.delete_range(document_id, start_index, end_index)
+            if success:
+                return f"Successfully deleted content from index {start_index} to {end_index}"
+            return "Failed to delete content"
+        
+        elif action == "replace":
+            if find_text is None or replace_text is None:
+                return "Error: 'replace' action requires 'find_text' and 'replace_text' parameters"
+            count = registry._docs_client.replace_all_text(document_id, find_text, replace_text)
+            if count >= 0:
+                return f"Replaced {count} occurrence(s) of '{find_text}' with '{replace_text}'"
+            return "Failed to replace text"
+        
+        elif action == "append":
+            if text is None:
+                return "Error: 'append' action requires 'text' parameter"
+            success = registry._docs_client.append_text(document_id, text)
+            if success:
+                return "Successfully appended text to the document"
+            return "Failed to append text"
+        
+        else:
+            return f"Unknown action: {action}. Valid actions are: insert, delete, replace, append"
+    
+    # Register Google Docs tools
+    registry.register(Tool(
+        name="get_doc_structure",
+        description="Get a Google Doc's content with character indices. Use this before editing to find the exact positions where you want to insert, delete, or modify text.",
+        func=get_doc_structure,
+        parameters={
+            "type": "object",
+            "properties": {
+                "document_id": {"type": "string", "description": "The Google Doc ID"}
+            },
+            "required": ["document_id"]
+        }
+    ))
+    
+    registry.register(Tool(
+        name="edit_google_doc",
+        description="Edit a Google Doc. Supports: insert (add text at index), delete (remove text range), replace (find and replace all), append (add to end).",
+        func=edit_google_doc,
+        parameters={
+            "type": "object",
+            "properties": {
+                "document_id": {"type": "string", "description": "The Google Doc ID"},
+                "action": {"type": "string", "description": "Action to perform: 'insert', 'delete', 'replace', or 'append'"},
+                "text": {"type": "string", "description": "Text to insert or append (for insert/append actions)"},
+                "index": {"type": "integer", "description": "Position to insert text at (for insert action). Use get_doc_structure to find indices."},
+                "start_index": {"type": "integer", "description": "Start of range to delete (for delete action, inclusive)"},
+                "end_index": {"type": "integer", "description": "End of range to delete (for delete action, exclusive)"},
+                "find_text": {"type": "string", "description": "Text to find (for replace action)"},
+                "replace_text": {"type": "string", "description": "Text to replace with (for replace action)"}
+            },
+            "required": ["document_id", "action"]
         }
     ))
     

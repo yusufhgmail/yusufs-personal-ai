@@ -18,6 +18,7 @@ from agent.tools import create_default_registry
 from integrations.discord_bot import DiscordBot, ConversationManager
 from integrations.gmail import GmailClient
 from integrations.google_drive import GoogleDriveClient
+from integrations.google_docs import GoogleDocsClient
 from learning.observer import LearningObserver
 
 
@@ -31,7 +32,7 @@ def create_learning_observer() -> LearningObserver:
     )
 
 
-def create_agent(gmail_client=None, drive_client=None) -> Agent:
+def create_agent(gmail_client=None, drive_client=None, docs_client=None) -> Agent:
     """Create and configure the AI agent."""
     # Create stores
     guidelines_store = GuidelinesStore()
@@ -40,7 +41,8 @@ def create_agent(gmail_client=None, drive_client=None) -> Agent:
     # Create tool registry with clients
     tool_registry = create_default_registry(
         gmail_client=gmail_client,
-        drive_client=drive_client
+        drive_client=drive_client,
+        docs_client=docs_client
     )
     
     # Create agent
@@ -71,6 +73,7 @@ def run_discord_bot():
     # Initialize clients (optional - will work without them)
     gmail_client = None
     drive_client = None
+    docs_client = None
     
     try:
         gmail_client = GmailClient()
@@ -86,8 +89,15 @@ def run_discord_bot():
         print(f"Google Drive client not available: {e}")
         print("Drive features will be simulated")
     
+    try:
+        docs_client = GoogleDocsClient()
+        print("Google Docs client initialized")
+    except Exception as e:
+        print(f"Google Docs client not available: {e}")
+        print("Document editing features will be simulated")
+    
     # Create agent
-    agent = create_agent(gmail_client=gmail_client, drive_client=drive_client)
+    agent = create_agent(gmail_client=gmail_client, drive_client=drive_client, docs_client=docs_client)
     print("Agent initialized")
     
     # Ensure initial guidelines exist

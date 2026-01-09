@@ -14,10 +14,11 @@ from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload, MediaIoBa
 from config.settings import get_settings
 
 
-# Drive API scopes
+# Google API scopes (Drive + Docs for editing)
 SCOPES = [
     'https://www.googleapis.com/auth/drive.file',
-    'https://www.googleapis.com/auth/drive.readonly'
+    'https://www.googleapis.com/auth/drive.readonly',
+    'https://www.googleapis.com/auth/documents'  # For editing Google Docs
 ]
 
 
