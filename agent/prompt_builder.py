@@ -136,7 +136,9 @@ class PromptBuilder:
         Returns:
             The task prompt
         """
-        prompt = f"## Current Task\n\n{task}"
+        # Just pass the user's message as-is (no "## Current Task" wrapper)
+        # The persistent task brief is already in the system prompt
+        prompt = task
         
         if context:
             prompt += f"\n\n## Context\n\n{context}"
