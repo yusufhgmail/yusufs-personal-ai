@@ -13,6 +13,7 @@
     - [x] Make sure memory works (before I start editing the attachment - so it learns about me while I edit before I make the edits)
     - [x] Ability to edit google docs
     - [ ] Short-term memory so that it can remember context and instructions when doing longer tasks
+      - [x] Ensure task brief injection works properly (it's now inserted into the system brief, and it seems to be created properly. I haven't checked if it updates and edits the task properly, or recreates a new task when i switch context completely.)
 
 ---
 
