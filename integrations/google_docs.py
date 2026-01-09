@@ -1,8 +1,19 @@
 """Google Docs API integration for editing documents."""
 
 import os
+import json
+import time
 from typing import Optional
 from dataclasses import dataclass
+
+# #region agent log
+DEBUG_LOG_PATH = r"c:\Users\yusuf\code\yusufsPersonalAIAssistant\.cursor\debug.log"
+def _debug_log(hypothesis_id: str, location: str, message: str, data: dict):
+    try:
+        with open(DEBUG_LOG_PATH, 'a') as f:
+            f.write(json.dumps({"hypothesisId": hypothesis_id, "location": location, "message": message, "data": data, "timestamp": int(time.time() * 1000), "sessionId": "debug-session"}) + "\n")
+    except: pass
+# #endregion
 
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -126,6 +137,9 @@ class GoogleDocsClient:
                             full_text += text
                             end_index = max(end_index, end_idx)
             
+            # #region agent log
+            _debug_log("B", "google_docs.py:get_document", "Document structure retrieved", {"doc_id": document_id, "first_paragraph_index": first_paragraph_index, "end_index": end_index, "num_segments": len(segments), "found_first_paragraph": found_first_paragraph})
+            # #endregion
             return DocumentContent(
                 document_id=document_id,
                 title=title,
@@ -135,6 +149,9 @@ class GoogleDocsClient:
                 end_index=end_index
             )
         except Exception as e:
+            # #region agent log
+            _debug_log("D", "google_docs.py:get_document:error", "Error getting document", {"doc_id": document_id, "error": str(e)})
+            # #endregion
             print(f"Error getting document: {e}")
             return None
     
@@ -153,6 +170,9 @@ class GoogleDocsClient:
         try:
             # Ensure minimum index is 1
             safe_index = max(1, index)
+            # #region agent log
+            _debug_log("A,B,C", "google_docs.py:insert_text:before", "About to call batchUpdate", {"doc_id": document_id, "original_index": index, "safe_index": safe_index, "text_length": len(text), "text_preview": text[:50]})
+            # #endregion
             
             requests = [
                 {
@@ -165,13 +185,19 @@ class GoogleDocsClient:
                 }
             ]
             
-            self.service.documents().batchUpdate(
+            result = self.service.documents().batchUpdate(
                 documentId=document_id,
                 body={'requests': requests}
             ).execute()
             
+            # #region agent log
+            _debug_log("A,C", "google_docs.py:insert_text:after", "batchUpdate completed", {"doc_id": document_id, "safe_index": safe_index, "result_keys": list(result.keys()) if result else None})
+            # #endregion
             return True
         except Exception as e:
+            # #region agent log
+            _debug_log("A", "google_docs.py:insert_text:error", "Exception in insert_text", {"doc_id": document_id, "index": index, "error": str(e)})
+            # #endregion
             print(f"Error inserting text: {e}")
             return False
     
