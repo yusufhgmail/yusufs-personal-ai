@@ -662,13 +662,13 @@ def create_default_registry(gmail_client=None, drive_client=None, docs_client=No
     
     registry.register(Tool(
         name="update_task_brief",
-        description="Update your working memory for the current task. Use this to track context and instructions during multi-step tasks so you don't forget them. Create a brief when starting a complex task, update it when the user gives new preferences, and replace it when moving to a different task.",
+        description="Update your working memory. IMPORTANT: When updating, PRESERVE existing context and ADD new information - don't rewrite from scratch unless starting a completely new task. Only call this when: (1) starting a new multi-step task, (2) Yusuf gives NEW instructions to add, or (3) switching to a different task entirely. Do NOT call on every message.",
         func=update_task_brief,
         parameters={
             "type": "object",
             "properties": {
-                "title": {"type": "string", "description": "Short title for the task (e.g., 'Editing Q&A document for Miguel')"},
-                "brief": {"type": "string", "description": "Full context including: what we're working on, current instructions/preferences, and any important details to remember"}
+                "title": {"type": "string", "description": "Short title for the task (keep stable unless task changes)"},
+                "brief": {"type": "string", "description": "ACCUMULATE context here: overall goal, document IDs, ALL instructions given so far, current progress. When adding new instructions, include previous ones too."}
             },
             "required": ["title", "brief"]
         }
