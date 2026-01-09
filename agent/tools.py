@@ -446,6 +446,8 @@ def create_default_registry(gmail_client=None, drive_client=None, docs_client=No
             return f"Could not find document with ID: {document_id}"
         
         result = f"**{doc.title}** (Document ID: {doc.document_id})\n\n"
+        result += f"**First paragraph index**: {doc.first_paragraph_index} (use for inserting at beginning)\n"
+        result += f"**End index**: {doc.end_index} (use for appending)\n\n"
         result += "**Content with indices** (use these indices for editing):\n\n"
         
         for segment in doc.segments:
@@ -453,13 +455,12 @@ def create_default_registry(gmail_client=None, drive_client=None, docs_client=No
             text_preview = segment.text.replace('\n', '\\n')
             result += f"[{segment.start_index}-{segment.end_index}] \"{text_preview}\"\n"
         
-        result += f"\n**End index**: {doc.end_index} (use for appending)\n"
         return result
     
     def edit_google_doc(document_id: str, action: str, text: Optional[str] = None, 
                         index: Optional[int] = None, start_index: Optional[int] = None, 
                         end_index: Optional[int] = None, find_text: Optional[str] = None, 
-                        replace_text: Optional[str] = None) -> str:
+                        replace_text: Optional[str] = None, after_text: Optional[str] = None) -> str:
         """Edit a Google Doc using various actions."""
         if registry._docs_client is None:
             return f"[Google Docs not configured] Would edit document: {document_id}"
@@ -470,7 +471,23 @@ def create_default_registry(gmail_client=None, drive_client=None, docs_client=No
             success = registry._docs_client.insert_text(document_id, text, index)
             if success:
                 return f"Successfully inserted text at index {index}"
-            return "Failed to insert text"
+            return "Failed to insert text. Make sure the index is within a paragraph (use get_doc_structure to find valid indices)."
+        
+        elif action == "insert_beginning":
+            if text is None:
+                return "Error: 'insert_beginning' action requires 'text' parameter"
+            success = registry._docs_client.insert_at_beginning(document_id, text)
+            if success:
+                return "Successfully inserted text at the beginning of the document"
+            return "Failed to insert text at beginning"
+        
+        elif action == "insert_after":
+            if text is None or after_text is None:
+                return "Error: 'insert_after' action requires 'text' and 'after_text' parameters"
+            success = registry._docs_client.insert_after_text(document_id, after_text, text)
+            if success:
+                return f"Successfully inserted text after '{after_text[:50]}...'" if len(after_text) > 50 else f"Successfully inserted text after '{after_text}'"
+            return f"Failed to insert text. Could not find '{after_text[:50]}...' in the document" if len(after_text) > 50 else f"Failed to insert text. Could not find '{after_text}' in the document"
         
         elif action == "delete":
             if start_index is None or end_index is None:
@@ -497,7 +514,7 @@ def create_default_registry(gmail_client=None, drive_client=None, docs_client=No
             return "Failed to append text"
         
         else:
-            return f"Unknown action: {action}. Valid actions are: insert, delete, replace, append"
+            return f"Unknown action: {action}. Valid actions are: insert, insert_beginning, insert_after, delete, replace, append"
     
     # Register Google Docs tools
     registry.register(Tool(
@@ -515,15 +532,16 @@ def create_default_registry(gmail_client=None, drive_client=None, docs_client=No
     
     registry.register(Tool(
         name="edit_google_doc",
-        description="Edit a Google Doc. Supports: insert (add text at index), delete (remove text range), replace (find and replace all), append (add to end).",
+        description="Edit a Google Doc. Actions: insert (at index), insert_beginning (at start), insert_after (after specific text), delete (range), replace (find/replace all), append (at end). For Q&A docs, use insert_after with the question text to add an answer right after it.",
         func=edit_google_doc,
         parameters={
             "type": "object",
             "properties": {
                 "document_id": {"type": "string", "description": "The Google Doc ID"},
-                "action": {"type": "string", "description": "Action to perform: 'insert', 'delete', 'replace', or 'append'"},
-                "text": {"type": "string", "description": "Text to insert or append (for insert/append actions)"},
+                "action": {"type": "string", "description": "Action: 'insert', 'insert_beginning', 'insert_after', 'delete', 'replace', or 'append'"},
+                "text": {"type": "string", "description": "Text to insert or append (for insert/insert_beginning/insert_after/append actions)"},
                 "index": {"type": "integer", "description": "Position to insert text at (for insert action). Use get_doc_structure to find indices."},
+                "after_text": {"type": "string", "description": "Text to search for and insert after (for insert_after action). The new text will be added right after this text."},
                 "start_index": {"type": "integer", "description": "Start of range to delete (for delete action, inclusive)"},
                 "end_index": {"type": "integer", "description": "End of range to delete (for delete action, exclusive)"},
                 "find_text": {"type": "string", "description": "Text to find (for replace action)"},

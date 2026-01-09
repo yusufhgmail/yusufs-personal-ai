@@ -34,6 +34,7 @@ class DocumentContent:
     title: str
     body_text: str
     segments: list[TextSegment]
+    first_paragraph_index: int  # First valid index for insertions (start of first paragraph)
     end_index: int  # Last valid index for insertions
 
 
@@ -94,10 +95,20 @@ class GoogleDocsClient:
             segments = []
             full_text = ""
             end_index = 1  # Documents start at index 1
+            first_paragraph_index = 1  # Default to 1
+            found_first_paragraph = False
             
             for element in content:
                 if 'paragraph' in element:
                     paragraph = element['paragraph']
+                    # Get the paragraph's start index from the element itself
+                    para_start = element.get('startIndex', 1)
+                    
+                    # Track the first paragraph's starting position
+                    if not found_first_paragraph:
+                        first_paragraph_index = para_start
+                        found_first_paragraph = True
+                    
                     para_elements = paragraph.get('elements', [])
                     
                     for para_element in para_elements:
@@ -120,6 +131,7 @@ class GoogleDocsClient:
                 title=title,
                 body_text=full_text,
                 segments=segments,
+                first_paragraph_index=first_paragraph_index,
                 end_index=end_index
             )
         except Exception as e:
@@ -139,11 +151,14 @@ class GoogleDocsClient:
             True if successful, False otherwise
         """
         try:
+            # Ensure minimum index is 1
+            safe_index = max(1, index)
+            
             requests = [
                 {
                     'insertText': {
                         'location': {
-                            'index': index
+                            'index': safe_index
                         },
                         'text': text
                     }
@@ -158,6 +173,72 @@ class GoogleDocsClient:
             return True
         except Exception as e:
             print(f"Error inserting text: {e}")
+            return False
+    
+    def insert_at_beginning(self, document_id: str, text: str) -> bool:
+        """
+        Insert text at the beginning of the document (first paragraph).
+        
+        Args:
+            document_id: The Google Doc ID
+            text: Text to insert
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            doc = self.get_document(document_id)
+            if not doc:
+                return False
+            
+            # Use the first paragraph index for safe insertion
+            return self.insert_text(document_id, text, doc.first_paragraph_index)
+        except Exception as e:
+            print(f"Error inserting at beginning: {e}")
+            return False
+    
+    def insert_after_text(self, document_id: str, search_text: str, text_to_insert: str) -> bool:
+        """
+        Insert text right after a specific text pattern in the document.
+        This is useful for inserting answers after questions.
+        
+        Args:
+            document_id: The Google Doc ID
+            search_text: Text to search for (insert will happen after this)
+            text_to_insert: Text to insert
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            doc = self.get_document(document_id)
+            if not doc:
+                return False
+            
+            # Find the search text in the document
+            body_text = doc.body_text
+            position = body_text.find(search_text)
+            
+            if position == -1:
+                print(f"Could not find text: {search_text}")
+                return False
+            
+            # Calculate the insertion index
+            # We need to find which segment contains this text and get the actual index
+            cumulative_length = 0
+            for segment in doc.segments:
+                segment_text = segment.text
+                if search_text in segment_text:
+                    # Found it in this segment
+                    local_pos = segment_text.find(search_text)
+                    # Insert after the search text
+                    insert_index = segment.start_index + local_pos + len(search_text)
+                    return self.insert_text(document_id, text_to_insert, insert_index)
+                cumulative_length += len(segment_text)
+            
+            return False
+        except Exception as e:
+            print(f"Error inserting after text: {e}")
             return False
     
     def delete_range(self, document_id: str, start_index: int, end_index: int) -> bool:
