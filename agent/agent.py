@@ -360,7 +360,8 @@ class Agent:
         current_prompt = task_prompt
         
         for i in range(max_iterations):
-            # Refresh task brief for each iteration (it might change during tool calls)
+            # Refresh task brief and rebuild system prompt for each iteration
+            # (task brief might change during tool calls like set_task_brief)
             if user_id:
                 try:
                     task_obj = self.active_task_store.get_active_task(user_id)
@@ -368,6 +369,9 @@ class Agent:
                         current_task_brief = f"{task_obj.title}: {task_obj.brief}"
                 except Exception as e:
                     pass  # Already logged above, don't spam
+            
+            # Rebuild system prompt to include any task brief changes
+            system_prompt = self.prompt_builder.build_system_prompt(tool_descriptions, user_id=user_id)
             
             # Get LLM response
             response_text = self._call_llm(
