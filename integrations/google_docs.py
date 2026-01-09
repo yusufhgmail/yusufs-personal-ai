@@ -83,6 +83,13 @@ class GoogleDocsClient:
         
         self.service = build('docs', 'v1', credentials=creds)
     
+    def _validate_document_id(self, document_id: str) -> bool:
+        """Check if the provided string looks like a document ID (not a name)."""
+        # Document IDs are alphanumeric with dashes/underscores, no spaces or parentheses
+        if ' ' in document_id or '(' in document_id or ')' in document_id:
+            return False
+        return True
+    
     def get_document(self, document_id: str) -> Optional[DocumentContent]:
         """
         Get document content with structure information including indices.
@@ -93,6 +100,12 @@ class GoogleDocsClient:
         Returns:
             DocumentContent with text segments and their indices
         """
+        # #region agent log
+        if not self._validate_document_id(document_id):
+            _debug_log("D", "google_docs.py:get_document:invalid_id", "Invalid document ID - looks like a name", {"doc_id": document_id})
+            print(f"ERROR: '{document_id}' looks like a document name, not an ID. Use search_drive_files to get the actual document ID.")
+            return None
+        # #endregion
         try:
             doc = self.service.documents().get(documentId=document_id).execute()
             

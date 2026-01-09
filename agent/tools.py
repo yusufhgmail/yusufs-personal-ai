@@ -524,7 +524,7 @@ def create_default_registry(gmail_client=None, drive_client=None, docs_client=No
         parameters={
             "type": "object",
             "properties": {
-                "document_id": {"type": "string", "description": "The Google Doc ID"}
+                "document_id": {"type": "string", "description": "The Google Doc ID (e.g. '1AH-mD6oY...' - get this from search_drive_files, NOT the document name)"}
             },
             "required": ["document_id"]
         }
@@ -537,7 +537,7 @@ def create_default_registry(gmail_client=None, drive_client=None, docs_client=No
         parameters={
             "type": "object",
             "properties": {
-                "document_id": {"type": "string", "description": "The Google Doc ID"},
+                "document_id": {"type": "string", "description": "The Google Doc ID (e.g. '1AH-mD6oY...' - get this from search_drive_files, NOT the document name)"},
                 "action": {"type": "string", "description": "Action: 'insert', 'insert_beginning', 'insert_after', 'delete', 'replace', or 'append'"},
                 "text": {"type": "string", "description": "Text to insert or append (for insert/insert_beginning/insert_after/append actions)"},
                 "index": {"type": "integer", "description": "Position to insert text at (for insert action). Use get_doc_structure to find indices."},
