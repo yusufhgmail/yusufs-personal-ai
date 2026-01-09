@@ -11,8 +11,8 @@
   - [x] Download attachment
   - [ ] Edit attachment (maybe by converting to Google Docs, not sure)
     - [x] Make sure memory works (before I start editing the attachment - so it learns about me while I edit before I make the edits)
-    - [ ] Ability to edit google docs
-      - [ ] Error when trying to add text. but it was intermittently able3 to write hello then no longer.
+    - [x] Ability to edit google docs
+    - [ ] Short-term memory so that it can remember context and instructions when doing longer tasks
 
 ---
 

@@ -160,7 +160,7 @@ class ConversationManager:
         # Check if this looks like approval of a previous draft
         if conversation_id and message.lower().strip() in ["send it", "looks good", "approved", "yes", "ok", "okay"]:
             self.pending_drafts.pop(user_id, None)  # Clear pending draft
-            response = self.agent.handle_feedback(conversation_id, message)
+            response = self.agent.handle_feedback(conversation_id, message, user_id=user_id)
             return response
         
         # Check if this might be an edited version of a draft (learning opportunity)
@@ -183,7 +183,7 @@ class ConversationManager:
                     learned_msg = f"\n\n*Learned from your edit: {', '.join(learning_result.patterns[:2])}*"
                     
                     # Continue with the agent to process the edited version
-                    response = self.agent.handle_feedback(conversation_id, message)
+                    response = self.agent.handle_feedback(conversation_id, message, user_id=user_id)
                     return response + learned_msg
         
         # Check if this is explicit feedback we can learn from
@@ -208,7 +208,7 @@ class ConversationManager:
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(
             None,
-            lambda: self.agent.run(message, conversation_id=conversation_id)
+            lambda: self.agent.run(message, conversation_id=conversation_id, user_id=user_id)
         )
         
         # Track if this response contains a draft for approval

@@ -1,7 +1,10 @@
 """Builds prompts with guidelines and facts for the agent."""
 
+from typing import Optional
+
 from storage.guidelines_store import GuidelinesStore
 from storage.facts_store import FactsStore
+from storage.active_task_store import ActiveTaskStore
 
 
 SYSTEM_PROMPT_TEMPLATE = """You are Yusuf's personal AI assistant. Your job is to help him with tasks, especially email responses.
@@ -13,7 +16,7 @@ SYSTEM_PROMPT_TEMPLATE = """You are Yusuf's personal AI assistant. Your job is t
 ## Guidelines for Working with Yusuf
 
 {guidelines}
-
+{active_task}
 ## Your Capabilities
 
 You have access to the following tools:
@@ -27,6 +30,16 @@ You have access to the following tools:
 4. Always ask for approval before sending emails or making permanent changes
 5. Learn from feedback - if Yusuf edits your work, that's valuable information
 6. When Yusuf shares important factual information about himself, his life, people he knows, events, or circumstances, use the remember_fact tool to store it for future reference
+
+## Working Memory (Task Brief)
+
+You have a working memory called "task brief" that persists across messages. Use `update_task_brief()` to keep it current:
+- Create one when starting a multi-step task (like editing a document with multiple questions)
+- Update it when Yusuf gives new preferences or instructions
+- Replace it when Yusuf moves to a completely different task
+- For quick one-off questions, you don't need a task brief
+
+The task brief should capture: what you're working on, current instructions/preferences, and any important context to remember.
 
 ## CRITICAL: Response Format
 
@@ -63,16 +76,23 @@ IMPORTANT: Always end with either ACTION: or FINAL_ANSWER: or DRAFT_FOR_APPROVAL
 class PromptBuilder:
     """Builds prompts with current guidelines and facts."""
     
-    def __init__(self, guidelines_store: GuidelinesStore, facts_store: FactsStore = None):
+    def __init__(
+        self, 
+        guidelines_store: GuidelinesStore, 
+        facts_store: FactsStore = None,
+        active_task_store: ActiveTaskStore = None
+    ):
         self.guidelines_store = guidelines_store
         self.facts_store = facts_store or FactsStore()
+        self.active_task_store = active_task_store or ActiveTaskStore()
     
-    def build_system_prompt(self, tool_descriptions: str) -> str:
+    def build_system_prompt(self, tool_descriptions: str, user_id: Optional[str] = None) -> str:
         """
-        Build the system prompt with current guidelines and facts.
+        Build the system prompt with current guidelines, facts, and active task.
         
         Args:
             tool_descriptions: Description of available tools
+            user_id: Optional user ID to fetch active task for
             
         Returns:
             The complete system prompt
@@ -80,9 +100,17 @@ class PromptBuilder:
         guidelines = self.guidelines_store.get_or_create_current()
         facts = self.facts_store.get_facts_as_text()
         
+        # Get active task if user_id is provided
+        active_task = ""
+        if user_id:
+            task_text = self.active_task_store.get_task_as_text(user_id)
+            if task_text:
+                active_task = f"\n{task_text}\n"
+        
         return SYSTEM_PROMPT_TEMPLATE.format(
             guidelines=guidelines.content,
             facts=facts,
+            active_task=active_task,
             tool_descriptions=tool_descriptions
         )
     

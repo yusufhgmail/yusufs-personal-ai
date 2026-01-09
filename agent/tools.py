@@ -4,6 +4,7 @@ from typing import Callable, Any, Optional
 from dataclasses import dataclass
 
 from storage.facts_store import FactsStore
+from storage.active_task_store import ActiveTaskStore
 
 
 @dataclass
@@ -24,6 +25,8 @@ class ToolRegistry:
         self._drive_client = None
         self._docs_client = None
         self._facts_store = None
+        self._active_task_store = None
+        self._current_user_id = None
     
     def set_gmail_client(self, client):
         """Set the Gmail client for email tools."""
@@ -40,6 +43,14 @@ class ToolRegistry:
     def set_facts_store(self, store: FactsStore):
         """Set the facts store for memory tools."""
         self._facts_store = store
+    
+    def set_active_task_store(self, store: ActiveTaskStore):
+        """Set the active task store for task brief tools."""
+        self._active_task_store = store
+    
+    def set_current_user_id(self, user_id: str):
+        """Set the current user ID for the current request."""
+        self._current_user_id = user_id
     
     def register(self, tool: Tool):
         """Register a tool."""
@@ -71,7 +82,7 @@ class ToolRegistry:
 
 
 # Create default tool registry
-def create_default_registry(gmail_client=None, drive_client=None, docs_client=None, facts_store=None) -> ToolRegistry:
+def create_default_registry(gmail_client=None, drive_client=None, docs_client=None, facts_store=None, active_task_store=None) -> ToolRegistry:
     """Create a tool registry with default tools."""
     registry = ToolRegistry()
     
@@ -86,6 +97,11 @@ def create_default_registry(gmail_client=None, drive_client=None, docs_client=No
     if facts_store is None:
         facts_store = FactsStore()
     registry.set_facts_store(facts_store)
+    
+    # Initialize active task store (create one if not provided)
+    if active_task_store is None:
+        active_task_store = ActiveTaskStore()
+    registry.set_active_task_store(active_task_store)
     
     # Gmail tools
     def search_emails(query: str, max_results: int = 5) -> str:
@@ -622,6 +638,39 @@ def create_default_registry(gmail_client=None, drive_client=None, docs_client=No
                 "fact_id": {"type": "integer", "description": "The ID of the fact to delete"}
             },
             "required": ["fact_id"]
+        }
+    ))
+    
+    # Task brief tool - for maintaining working memory during long tasks
+    def update_task_brief(title: str, brief: str) -> str:
+        """Update the current task brief (AI's working memory for long-running tasks)."""
+        if registry._active_task_store is None:
+            return "[Active task store not configured]"
+        
+        if registry._current_user_id is None:
+            return "[Error: No user context available]"
+        
+        try:
+            registry._active_task_store.set_active_task(
+                user_id=registry._current_user_id,
+                title=title,
+                brief=brief
+            )
+            return f"Task brief updated: {title}"
+        except Exception as e:
+            return f"Failed to update task brief: {str(e)}"
+    
+    registry.register(Tool(
+        name="update_task_brief",
+        description="Update your working memory for the current task. Use this to track context and instructions during multi-step tasks so you don't forget them. Create a brief when starting a complex task, update it when the user gives new preferences, and replace it when moving to a different task.",
+        func=update_task_brief,
+        parameters={
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "Short title for the task (e.g., 'Editing Q&A document for Miguel')"},
+                "brief": {"type": "string", "description": "Full context including: what we're working on, current instructions/preferences, and any important details to remember"}
+            },
+            "required": ["title", "brief"]
         }
     ))
     

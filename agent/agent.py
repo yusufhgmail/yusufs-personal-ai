@@ -10,6 +10,7 @@ from storage.guidelines_store import GuidelinesStore
 from storage.interactions_store import InteractionsStore
 from storage.llm_log_store import LLMLogStore
 from storage.facts_store import FactsStore
+from storage.active_task_store import ActiveTaskStore
 from agent.prompt_builder import PromptBuilder
 from agent.tools import ToolRegistry, create_default_registry
 
@@ -41,15 +42,24 @@ class Agent:
         interactions_store: Optional[InteractionsStore] = None,
         tool_registry: Optional[ToolRegistry] = None,
         llm_log_store: Optional[LLMLogStore] = None,
-        facts_store: Optional[FactsStore] = None
+        facts_store: Optional[FactsStore] = None,
+        active_task_store: Optional[ActiveTaskStore] = None
     ):
         self.settings = get_settings()
         self.guidelines_store = guidelines_store or GuidelinesStore()
         self.interactions_store = interactions_store or InteractionsStore()
         self.facts_store = facts_store or FactsStore()
-        self.tool_registry = tool_registry or create_default_registry(facts_store=self.facts_store)
+        self.active_task_store = active_task_store or ActiveTaskStore()
+        self.tool_registry = tool_registry or create_default_registry(
+            facts_store=self.facts_store,
+            active_task_store=self.active_task_store
+        )
         self.llm_log_store = llm_log_store or LLMLogStore()
-        self.prompt_builder = PromptBuilder(self.guidelines_store, self.facts_store)
+        self.prompt_builder = PromptBuilder(
+            self.guidelines_store, 
+            self.facts_store,
+            self.active_task_store
+        )
         
         # Initialize LLM client based on provider
         self.llm = self._create_llm_client()
@@ -286,13 +296,14 @@ class Agent:
         
         return AgentResponse(type="thought", content=response)
     
-    def run(self, task: str, conversation_id: Optional[str] = None, max_iterations: int = 10) -> str:
+    def run(self, task: str, conversation_id: Optional[str] = None, user_id: Optional[str] = None, max_iterations: int = 10) -> str:
         """
         Run the agent on a task.
         
         Args:
             task: The task description from the user
             conversation_id: Optional conversation ID for tracking
+            user_id: Optional user ID (Discord user ID) for task brief persistence
             max_iterations: Maximum number of reasoning iterations
             
         Returns:
@@ -301,6 +312,10 @@ class Agent:
         # Create conversation if needed
         if conversation_id is None:
             conversation_id = self.interactions_store.create_conversation_id()
+        
+        # Set current user ID on tool registry so tools can access it
+        if user_id:
+            self.tool_registry.set_current_user_id(user_id)
         
         # Load previous conversation history (before adding current message)
         prev_interactions = self.interactions_store.get_conversation(conversation_id)
@@ -321,7 +336,7 @@ class Agent:
         
         # Build prompts
         tool_descriptions = self.tool_registry.get_descriptions()
-        system_prompt = self.prompt_builder.build_system_prompt(tool_descriptions)
+        system_prompt = self.prompt_builder.build_system_prompt(tool_descriptions, user_id=user_id)
         task_prompt = self.prompt_builder.build_task_prompt(task)
         
         # Agent loop
@@ -400,13 +415,14 @@ class Agent:
         )
         return final_message
     
-    def handle_feedback(self, conversation_id: str, feedback: str) -> str:
+    def handle_feedback(self, conversation_id: str, feedback: str, user_id: Optional[str] = None) -> str:
         """
         Handle user feedback on a draft or response.
         
         Args:
             conversation_id: The conversation ID
             feedback: User's feedback or edited version
+            user_id: Optional user ID for task brief persistence
             
         Returns:
             Agent's response to the feedback
@@ -424,6 +440,7 @@ class Agent:
         # Otherwise, it's an edit or correction - continue the conversation
         return self.run(
             f"The user provided this feedback on the previous draft: {feedback}. Please incorporate their feedback.",
-            conversation_id=conversation_id
+            conversation_id=conversation_id,
+            user_id=user_id
         )
 
