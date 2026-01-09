@@ -1,16 +1,8 @@
 """Google Docs API integration for editing documents."""
 
 import os
-import json
-import time
 from typing import Optional
 from dataclasses import dataclass
-
-# #region agent log
-def _debug_log(hypothesis_id: str, location: str, message: str, data: dict):
-    log_entry = json.dumps({"hypothesisId": hypothesis_id, "location": location, "message": message, "data": data, "timestamp": int(time.time() * 1000)})
-    print(f"[DEBUG] {log_entry}")
-# #endregion
 
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -100,12 +92,9 @@ class GoogleDocsClient:
         Returns:
             DocumentContent with text segments and their indices
         """
-        # #region agent log
         if not self._validate_document_id(document_id):
-            _debug_log("D", "google_docs.py:get_document:invalid_id", "Invalid document ID - looks like a name", {"doc_id": document_id})
             print(f"ERROR: '{document_id}' looks like a document name, not an ID. Use search_drive_files to get the actual document ID.")
             return None
-        # #endregion
         try:
             doc = self.service.documents().get(documentId=document_id).execute()
             
@@ -147,9 +136,6 @@ class GoogleDocsClient:
                             full_text += text
                             end_index = max(end_index, end_idx)
             
-            # #region agent log
-            _debug_log("B", "google_docs.py:get_document", "Document structure retrieved", {"doc_id": document_id, "first_paragraph_index": first_paragraph_index, "end_index": end_index, "num_segments": len(segments), "found_first_paragraph": found_first_paragraph})
-            # #endregion
             return DocumentContent(
                 document_id=document_id,
                 title=title,
@@ -159,9 +145,6 @@ class GoogleDocsClient:
                 end_index=end_index
             )
         except Exception as e:
-            # #region agent log
-            _debug_log("D", "google_docs.py:get_document:error", "Error getting document", {"doc_id": document_id, "error": str(e)})
-            # #endregion
             print(f"Error getting document: {e}")
             return None
     
@@ -180,9 +163,6 @@ class GoogleDocsClient:
         try:
             # Ensure minimum index is 1
             safe_index = max(1, index)
-            # #region agent log
-            _debug_log("A,B,C", "google_docs.py:insert_text:before", "About to call batchUpdate", {"doc_id": document_id, "original_index": index, "safe_index": safe_index, "text_length": len(text), "text_preview": text[:50]})
-            # #endregion
             
             requests = [
                 {
@@ -195,19 +175,13 @@ class GoogleDocsClient:
                 }
             ]
             
-            result = self.service.documents().batchUpdate(
+            self.service.documents().batchUpdate(
                 documentId=document_id,
                 body={'requests': requests}
             ).execute()
             
-            # #region agent log
-            _debug_log("A,C", "google_docs.py:insert_text:after", "batchUpdate completed", {"doc_id": document_id, "safe_index": safe_index, "result_keys": list(result.keys()) if result else None})
-            # #endregion
             return True
         except Exception as e:
-            # #region agent log
-            _debug_log("A", "google_docs.py:insert_text:error", "Exception in insert_text", {"doc_id": document_id, "index": index, "error": str(e)})
-            # #endregion
             print(f"Error inserting text: {e}")
             return False
     
@@ -222,30 +196,14 @@ class GoogleDocsClient:
         Returns:
             True if successful, False otherwise
         """
-        # #region agent log
-        _debug_log("A,B", "google_docs.py:insert_at_beginning:entry", "Called insert_at_beginning", {"doc_id": document_id, "text_preview": text[:50]})
-        # #endregion
         try:
             doc = self.get_document(document_id)
             if not doc:
-                # #region agent log
-                _debug_log("D", "google_docs.py:insert_at_beginning:no_doc", "get_document returned None", {"doc_id": document_id})
-                # #endregion
                 return False
             
-            # #region agent log
-            _debug_log("B", "google_docs.py:insert_at_beginning:before_insert", "About to call insert_text", {"doc_id": document_id, "first_paragraph_index": doc.first_paragraph_index})
-            # #endregion
             # Use the first paragraph index for safe insertion
-            result = self.insert_text(document_id, text, doc.first_paragraph_index)
-            # #region agent log
-            _debug_log("A", "google_docs.py:insert_at_beginning:after_insert", "insert_text returned", {"doc_id": document_id, "result": result})
-            # #endregion
-            return result
+            return self.insert_text(document_id, text, doc.first_paragraph_index)
         except Exception as e:
-            # #region agent log
-            _debug_log("A", "google_docs.py:insert_at_beginning:error", "Exception", {"error": str(e)})
-            # #endregion
             print(f"Error inserting at beginning: {e}")
             return False
     
@@ -262,23 +220,14 @@ class GoogleDocsClient:
         Returns:
             True if successful, False otherwise
         """
-        # #region agent log
-        _debug_log("E", "google_docs.py:insert_after_text:entry", "Called insert_after_text", {"doc_id": document_id, "search_text_preview": search_text[:50] if search_text else None, "insert_text_preview": text_to_insert[:50] if text_to_insert else None})
-        # #endregion
         try:
             doc = self.get_document(document_id)
             if not doc:
-                # #region agent log
-                _debug_log("E", "google_docs.py:insert_after_text:no_doc", "get_document returned None", {"doc_id": document_id})
-                # #endregion
                 return False
             
             # Find the search text in the document
             body_text = doc.body_text
             position = body_text.find(search_text)
-            # #region agent log
-            _debug_log("E", "google_docs.py:insert_after_text:search", "Searched for text", {"found_position": position, "body_text_length": len(body_text)})
-            # #endregion
             
             if position == -1:
                 print(f"Could not find text: {search_text}")
@@ -286,7 +235,6 @@ class GoogleDocsClient:
             
             # Calculate the insertion index
             # We need to find which segment contains this text and get the actual index
-            cumulative_length = 0
             for segment in doc.segments:
                 segment_text = segment.text
                 if search_text in segment_text:
@@ -295,7 +243,6 @@ class GoogleDocsClient:
                     # Insert after the search text
                     insert_index = segment.start_index + local_pos + len(search_text)
                     return self.insert_text(document_id, text_to_insert, insert_index)
-                cumulative_length += len(segment_text)
             
             return False
         except Exception as e:
@@ -400,4 +347,3 @@ class GoogleDocsClient:
         except Exception as e:
             print(f"Error appending text: {e}")
             return False
-

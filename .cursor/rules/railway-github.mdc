@@ -1,5 +1,0 @@
----
-alwaysApply: true
----
-
-Railway is connected to github and auto-deploys when I push new versions. Don't push manually to railway unless explicitly asked to.
