@@ -7,12 +7,9 @@ from typing import Optional
 from dataclasses import dataclass
 
 # #region agent log
-DEBUG_LOG_PATH = r"c:\Users\yusuf\code\yusufsPersonalAIAssistant\.cursor\debug.log"
 def _debug_log(hypothesis_id: str, location: str, message: str, data: dict):
-    try:
-        with open(DEBUG_LOG_PATH, 'a') as f:
-            f.write(json.dumps({"hypothesisId": hypothesis_id, "location": location, "message": message, "data": data, "timestamp": int(time.time() * 1000), "sessionId": "debug-session"}) + "\n")
-    except: pass
+    log_entry = json.dumps({"hypothesisId": hypothesis_id, "location": location, "message": message, "data": data, "timestamp": int(time.time() * 1000)})
+    print(f"[DEBUG] {log_entry}")
 # #endregion
 
 from google.oauth2.credentials import Credentials
