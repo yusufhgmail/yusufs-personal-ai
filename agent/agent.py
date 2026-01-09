@@ -9,6 +9,7 @@ from config.settings import get_settings
 from storage.guidelines_store import GuidelinesStore
 from storage.interactions_store import InteractionsStore
 from storage.llm_log_store import LLMLogStore
+from storage.facts_store import FactsStore
 from agent.prompt_builder import PromptBuilder
 from agent.tools import ToolRegistry, create_default_registry
 
@@ -39,14 +40,16 @@ class Agent:
         guidelines_store: Optional[GuidelinesStore] = None,
         interactions_store: Optional[InteractionsStore] = None,
         tool_registry: Optional[ToolRegistry] = None,
-        llm_log_store: Optional[LLMLogStore] = None
+        llm_log_store: Optional[LLMLogStore] = None,
+        facts_store: Optional[FactsStore] = None
     ):
         self.settings = get_settings()
         self.guidelines_store = guidelines_store or GuidelinesStore()
         self.interactions_store = interactions_store or InteractionsStore()
-        self.tool_registry = tool_registry or create_default_registry()
+        self.facts_store = facts_store or FactsStore()
+        self.tool_registry = tool_registry or create_default_registry(facts_store=self.facts_store)
         self.llm_log_store = llm_log_store or LLMLogStore()
-        self.prompt_builder = PromptBuilder(self.guidelines_store)
+        self.prompt_builder = PromptBuilder(self.guidelines_store, self.facts_store)
         
         # Initialize LLM client based on provider
         self.llm = self._create_llm_client()

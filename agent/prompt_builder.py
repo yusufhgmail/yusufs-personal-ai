@@ -1,9 +1,14 @@
-"""Builds prompts with guidelines for the agent."""
+"""Builds prompts with guidelines and facts for the agent."""
 
 from storage.guidelines_store import GuidelinesStore
+from storage.facts_store import FactsStore
 
 
 SYSTEM_PROMPT_TEMPLATE = """You are Yusuf's personal AI assistant. Your job is to help him with tasks, especially email responses.
+
+## Facts About Yusuf
+
+{facts}
 
 ## Guidelines for Working with Yusuf
 
@@ -21,6 +26,7 @@ You have access to the following tools:
 3. When drafting content (emails, documents), follow the guidelines above
 4. Always ask for approval before sending emails or making permanent changes
 5. Learn from feedback - if Yusuf edits your work, that's valuable information
+6. When Yusuf shares important factual information about himself, his life, people he knows, events, or circumstances, use the remember_fact tool to store it for future reference
 
 ## CRITICAL: Response Format
 
@@ -55,14 +61,15 @@ IMPORTANT: Always end with either ACTION: or FINAL_ANSWER: or DRAFT_FOR_APPROVAL
 
 
 class PromptBuilder:
-    """Builds prompts with current guidelines."""
+    """Builds prompts with current guidelines and facts."""
     
-    def __init__(self, guidelines_store: GuidelinesStore):
+    def __init__(self, guidelines_store: GuidelinesStore, facts_store: FactsStore = None):
         self.guidelines_store = guidelines_store
+        self.facts_store = facts_store or FactsStore()
     
     def build_system_prompt(self, tool_descriptions: str) -> str:
         """
-        Build the system prompt with current guidelines.
+        Build the system prompt with current guidelines and facts.
         
         Args:
             tool_descriptions: Description of available tools
@@ -71,9 +78,11 @@ class PromptBuilder:
             The complete system prompt
         """
         guidelines = self.guidelines_store.get_or_create_current()
+        facts = self.facts_store.get_facts_as_text()
         
         return SYSTEM_PROMPT_TEMPLATE.format(
             guidelines=guidelines.content,
+            facts=facts,
             tool_descriptions=tool_descriptions
         )
     

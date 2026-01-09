@@ -1,0 +1,39 @@
+---
+alwaysApply: true
+---
+# No Redundant Fallback Mechanisms
+
+## Rule
+Do NOT create "safety net" or "fallback" mechanisms that partially duplicate the primary system's functionality.
+
+## Why This Matters
+When a primary mechanism (like an LLM making decisions) is supplemented by a simpler fallback (like regex pattern matching), the fallback creates **intermittent success** that masks failures in the primary system.
+
+## Example of What NOT to Do
+```python
+# BAD: Two mechanisms doing the same job
+def process_message(message):
+    # Primary: LLM extracts facts using remember_fact tool
+    llm_response = call_llm(message)
+    
+    # Redundant fallback: regex also tries to extract facts
+    # This "catches" some cases the LLM misses, creating confusion
+    regex_facts = extract_facts_with_regex(message)
+    store_facts(regex_facts)
+```
+
+## Correct Approach
+```python
+# GOOD: Single mechanism, clear success or failure
+def process_message(message):
+    # Only the LLM extracts facts - if it fails, we know immediately
+    llm_response = call_llm(message)
+    # No fallback - either it works or it clearly doesn't
+```
+
+## When Fallbacks ARE Appropriate
+- Graceful degradation for external services (API down → show cached data)
+- User-facing error handling (show friendly message instead of crash)
+- Retry logic for transient failures
+
+These are different from redundant fallbacks because they handle *different failure modes*, not the same functionality.

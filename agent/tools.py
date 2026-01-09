@@ -3,6 +3,8 @@
 from typing import Callable, Any, Optional
 from dataclasses import dataclass
 
+from storage.facts_store import FactsStore
+
 
 @dataclass
 class Tool:
@@ -20,6 +22,7 @@ class ToolRegistry:
         self.tools: dict[str, Tool] = {}
         self._gmail_client = None
         self._drive_client = None
+        self._facts_store = None
     
     def set_gmail_client(self, client):
         """Set the Gmail client for email tools."""
@@ -28,6 +31,10 @@ class ToolRegistry:
     def set_drive_client(self, client):
         """Set the Google Drive client for file tools."""
         self._drive_client = client
+    
+    def set_facts_store(self, store: FactsStore):
+        """Set the facts store for memory tools."""
+        self._facts_store = store
     
     def register(self, tool: Tool):
         """Register a tool."""
@@ -59,7 +66,7 @@ class ToolRegistry:
 
 
 # Create default tool registry
-def create_default_registry(gmail_client=None, drive_client=None) -> ToolRegistry:
+def create_default_registry(gmail_client=None, drive_client=None, facts_store=None) -> ToolRegistry:
     """Create a tool registry with default tools."""
     registry = ToolRegistry()
     
@@ -67,6 +74,11 @@ def create_default_registry(gmail_client=None, drive_client=None) -> ToolRegistr
         registry.set_gmail_client(gmail_client)
     if drive_client:
         registry.set_drive_client(drive_client)
+    
+    # Initialize facts store (create one if not provided)
+    if facts_store is None:
+        facts_store = FactsStore()
+    registry.set_facts_store(facts_store)
     
     # Gmail tools
     def search_emails(query: str, max_results: int = 5) -> str:
@@ -413,6 +425,80 @@ def create_default_registry(gmail_client=None, drive_client=None) -> ToolRegistr
                 "parent_folder_id": {"type": "string", "description": "Optional: ID of a parent folder to list subfolders of. If not provided, lists top-level accessible folders."}
             },
             "required": []
+        }
+    ))
+    
+    # Memory tools - for storing facts about Yusuf
+    def remember_fact(fact: str) -> str:
+        """Store a fact about Yusuf in memory."""
+        if registry._facts_store is None:
+            return "[Facts store not configured] Would remember: " + fact
+        
+        try:
+            stored_fact = registry._facts_store.add_fact(fact)
+            return f"Remembered: {fact}"
+        except Exception as e:
+            return f"Failed to store fact: {str(e)}"
+    
+    def list_facts() -> str:
+        """List all stored facts about Yusuf."""
+        if registry._facts_store is None:
+            return "[Facts store not configured]"
+        
+        facts = registry._facts_store.get_all_facts()
+        if not facts:
+            return "No facts stored yet."
+        
+        result = f"Stored facts about Yusuf ({len(facts)}):\n\n"
+        for fact in facts:
+            date_str = fact.created_at.strftime("%Y-%m-%d")
+            result += f"- [{date_str}] {fact.content}\n"
+        return result
+    
+    def forget_fact(fact_id: int) -> str:
+        """Delete a fact from memory."""
+        if registry._facts_store is None:
+            return "[Facts store not configured]"
+        
+        if registry._facts_store.delete_fact(fact_id):
+            return f"Deleted fact with ID: {fact_id}"
+        return f"Could not find fact with ID: {fact_id}"
+    
+    # Register memory tools
+    registry.register(Tool(
+        name="remember_fact",
+        description="Store a fact about Yusuf in memory. Use this when Yusuf shares important information about himself, his life, people he knows, events, goals, or circumstances. Facts should be objective information, not preferences.",
+        func=remember_fact,
+        parameters={
+            "type": "object",
+            "properties": {
+                "fact": {"type": "string", "description": "The fact to remember (e.g., 'Miguel is a friend who works at Google' or 'Yusuf started his company in 2020')"}
+            },
+            "required": ["fact"]
+        }
+    ))
+    
+    registry.register(Tool(
+        name="list_facts",
+        description="List all stored facts about Yusuf from memory.",
+        func=list_facts,
+        parameters={
+            "type": "object",
+            "properties": {},
+            "required": []
+        }
+    ))
+    
+    registry.register(Tool(
+        name="forget_fact",
+        description="Delete a fact from memory by its ID. Use list_facts first to find the ID.",
+        func=forget_fact,
+        parameters={
+            "type": "object",
+            "properties": {
+                "fact_id": {"type": "integer", "description": "The ID of the fact to delete"}
+            },
+            "required": ["fact_id"]
         }
     ))
     
