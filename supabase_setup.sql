@@ -19,7 +19,7 @@ END $$;
 CREATE TABLE IF NOT EXISTS interactions (
     id SERIAL PRIMARY KEY,
     conversation_id TEXT NOT NULL,
-    role TEXT NOT NULL CHECK (role IN ('user', 'agent')),
+    role TEXT NOT NULL CHECK (role IN ('user', 'agent', 'tool')),
     content TEXT NOT NULL,
     metadata JSONB DEFAULT '{}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
