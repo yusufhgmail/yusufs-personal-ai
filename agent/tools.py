@@ -4,7 +4,6 @@ from typing import Callable, Any, Optional
 from dataclasses import dataclass
 
 from storage.facts_store import FactsStore
-from storage.active_task_store import ActiveTaskStore
 
 
 @dataclass
@@ -25,7 +24,6 @@ class ToolRegistry:
         self._drive_client = None
         self._docs_client = None
         self._facts_store = None
-        self._active_task_store = None
         self._current_user_id = None
     
     def set_gmail_client(self, client):
@@ -43,10 +41,6 @@ class ToolRegistry:
     def set_facts_store(self, store: FactsStore):
         """Set the facts store for memory tools."""
         self._facts_store = store
-    
-    def set_active_task_store(self, store: ActiveTaskStore):
-        """Set the active task store for task brief tools."""
-        self._active_task_store = store
     
     def set_current_user_id(self, user_id: str):
         """Set the current user ID for the current request."""
@@ -82,7 +76,7 @@ class ToolRegistry:
 
 
 # Create default tool registry
-def create_default_registry(gmail_client=None, drive_client=None, docs_client=None, facts_store=None, active_task_store=None) -> ToolRegistry:
+def create_default_registry(gmail_client=None, drive_client=None, docs_client=None, facts_store=None) -> ToolRegistry:
     """Create a tool registry with default tools."""
     registry = ToolRegistry()
     
@@ -97,11 +91,6 @@ def create_default_registry(gmail_client=None, drive_client=None, docs_client=No
     if facts_store is None:
         facts_store = FactsStore()
     registry.set_facts_store(facts_store)
-    
-    # Initialize active task store (create one if not provided)
-    if active_task_store is None:
-        active_task_store = ActiveTaskStore()
-    registry.set_active_task_store(active_task_store)
     
     # Gmail tools
     def search_emails(query: str, max_results: int = 5) -> str:
@@ -641,73 +630,4 @@ def create_default_registry(gmail_client=None, drive_client=None, docs_client=No
         }
     ))
     
-    # Task brief tools - for maintaining working memory during long tasks
-    # Two separate tools with clear different purposes
-    
-    def set_task_brief(title: str, brief: str) -> str:
-        """Set a NEW task brief (replaces any existing one). Use when starting a new task."""
-        if registry._active_task_store is None:
-            return "[Active task store not configured]"
-        
-        if registry._current_user_id is None:
-            return "[Error: No user context available]"
-        
-        try:
-            registry._active_task_store.set_active_task(
-                user_id=registry._current_user_id,
-                title=title,
-                brief=brief
-            )
-            return f"New task brief set: {title}"
-        except Exception as e:
-            return f"Failed to set task brief: {str(e)}"
-    
-    def add_to_task_brief(instruction: str) -> str:
-        """Add an instruction to the existing task brief. Use when Yusuf gives new preferences."""
-        if registry._active_task_store is None:
-            return "[Active task store not configured]"
-        
-        if registry._current_user_id is None:
-            return "[Error: No user context available]"
-        
-        try:
-            result = registry._active_task_store.append_instruction(
-                user_id=registry._current_user_id,
-                instruction=instruction
-            )
-            if result:
-                return f"Added to task brief: {instruction}"
-            else:
-                return "No active task brief exists. Use set_task_brief first to create one."
-        except Exception as e:
-            return f"Failed to add to task brief: {str(e)}"
-    
-    registry.register(Tool(
-        name="set_task_brief",
-        description="Start a NEW task by setting a fresh task brief. This REPLACES any existing brief. Only use when: (1) starting a brand new multi-step task, or (2) switching to a completely different task. Do NOT use for adding instructions to an existing task.",
-        func=set_task_brief,
-        parameters={
-            "type": "object",
-            "properties": {
-                "title": {"type": "string", "description": "Short title for the task (e.g., 'Editing Q&A document for Miguel')"},
-                "brief": {"type": "string", "description": "Initial context: overall goal, document IDs, any starting instructions"}
-            },
-            "required": ["title", "brief"]
-        }
-    ))
-    
-    registry.register(Tool(
-        name="add_to_task_brief",
-        description="Add a new instruction or preference to the EXISTING task brief. Use when Yusuf gives feedback like 'list each question', 'be more formal', etc. This safely APPENDS without erasing existing context.",
-        func=add_to_task_brief,
-        parameters={
-            "type": "object",
-            "properties": {
-                "instruction": {"type": "string", "description": "The new instruction or preference to add (e.g., 'List each question with its proposed answer')"}
-            },
-            "required": ["instruction"]
-        }
-    ))
-    
     return registry
-
