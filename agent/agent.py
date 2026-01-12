@@ -91,7 +91,8 @@ class Agent:
         conversation_id: Optional[str] = None,
         iteration: int = 0,
         original_user_message: Optional[str] = None,
-        current_focus: Optional[str] = None
+        current_focus: Optional[str] = None,
+        tool_observations: list[dict] = None
     ) -> str:
         """
         Call the LLM with the given prompts.
@@ -104,6 +105,7 @@ class Agent:
             iteration: Current iteration number in agent loop (for logging)
             original_user_message: The original user request (for logging/debugging)
             current_focus: The current focus line (for logging)
+            tool_observations: Tool observations collected during this agent run (for logging)
         """
         messages = []
         
@@ -165,7 +167,8 @@ class Agent:
                         response_metadata={},
                         error=error,
                         original_user_message=original_user_message,
-                        current_task_brief=current_focus
+                        current_task_brief=current_focus,
+                        tool_observations=tool_observations
                     )
                 except Exception as log_error:
                     print(f"Warning: Failed to log LLM error: {log_error}")
@@ -203,7 +206,8 @@ class Agent:
                         response_metadata={},
                         error=error,
                         original_user_message=original_user_message,
-                        current_task_brief=current_focus
+                        current_task_brief=current_focus,
+                        tool_observations=tool_observations
                     )
                 except Exception as log_error:
                     print(f"Warning: Failed to log LLM error: {log_error}")
@@ -224,7 +228,8 @@ class Agent:
                 response_metadata=response_metadata,
                 error=error,
                 original_user_message=original_user_message,
-                current_task_brief=current_focus
+                current_task_brief=current_focus,
+                tool_observations=tool_observations
             )
         except Exception as log_error:
             import traceback
@@ -374,6 +379,9 @@ class Agent:
             role = interaction.role
             if role == "agent":
                 role = "assistant"
+            elif role == "tool":
+                # Tool observations are presented as user messages to the LLM
+                role = "user"
             history.append({"role": role, "content": interaction.content})
         
         # Log the current user message (this will be included in next run's history)
@@ -406,6 +414,7 @@ class Agent:
         current_prompt = task_prompt
         final_response = None
         extracted_focus = None
+        collected_tool_observations = []  # Track all tool observations during this run
         
         for i in range(max_iterations):
             # Get LLM response
@@ -416,7 +425,8 @@ class Agent:
                 conversation_id=conversation_id,
                 iteration=i,
                 original_user_message=task,
-                current_focus=current_focus
+                current_focus=current_focus,
+                tool_observations=collected_tool_observations.copy()
             )
             
             # Parse response
@@ -454,6 +464,26 @@ class Agent:
                     observation = f"OBSERVATION: {result}"
                 except Exception as e:
                     observation = f"OBSERVATION: Error executing {response.action_name}: {str(e)}"
+                
+                # Store the agent's action (thought + action) to interactions
+                self.interactions_store.add_message(
+                    conversation_id, "agent", response_text,
+                    {"type": "action", "tool_name": response.action_name, "action_input": response.action_input}
+                )
+                
+                # Store the tool observation to interactions (persists IDs for future context)
+                self.interactions_store.add_message(
+                    conversation_id, "tool", observation,
+                    {"tool_name": response.action_name}
+                )
+                
+                # Collect tool observation for logging
+                collected_tool_observations.append({
+                    "iteration": i,
+                    "tool_name": response.action_name,
+                    "action_input": response.action_input,
+                    "observation": observation
+                })
                 
                 # Preserve the original user message in history
                 if i == 0:

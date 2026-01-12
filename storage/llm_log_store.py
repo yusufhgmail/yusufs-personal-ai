@@ -24,6 +24,7 @@ class LLMLog:
     error: Optional[str] = None
     original_user_message: Optional[str] = None  # The actual user request that started this agent run
     current_task_brief: Optional[str] = None  # The active task brief during this call
+    tool_observations: List[dict] = field(default_factory=list)  # Tool observations during this agent run
     created_at: datetime = field(default_factory=datetime.now)
 
 
@@ -46,7 +47,8 @@ class LLMLogStore:
         response_metadata: Optional[dict] = None,
         error: Optional[str] = None,
         original_user_message: Optional[str] = None,
-        current_task_brief: Optional[str] = None
+        current_task_brief: Optional[str] = None,
+        tool_observations: Optional[List[dict]] = None
     ) -> LLMLog:
         """
         Log an LLM API call.
@@ -63,6 +65,7 @@ class LLMLogStore:
             error: Optional error message if call failed
             original_user_message: The actual user request that started this agent run
             current_task_brief: The active task brief during this call
+            tool_observations: Tool observations collected during this agent run
             
         Returns:
             The created LLMLog
@@ -78,7 +81,8 @@ class LLMLogStore:
             "response_metadata": response_metadata or {},
             "error": error,
             "original_user_message": original_user_message,
-            "current_task_brief": current_task_brief
+            "current_task_brief": current_task_brief,
+            "tool_observations": tool_observations or []
         }).execute()
         
         row = db_response.data[0]
@@ -95,6 +99,7 @@ class LLMLogStore:
             error=row.get("error"),
             original_user_message=row.get("original_user_message"),
             current_task_brief=row.get("current_task_brief"),
+            tool_observations=row.get("tool_observations", []),
             created_at=datetime.fromisoformat(row["created_at"].replace("Z", "+00:00"))
         )
     
@@ -129,6 +134,7 @@ class LLMLogStore:
                 error=row.get("error"),
                 original_user_message=row.get("original_user_message"),
                 current_task_brief=row.get("current_task_brief"),
+                tool_observations=row.get("tool_observations", []),
                 created_at=datetime.fromisoformat(row["created_at"].replace("Z", "+00:00"))
             )
             for row in response.data
@@ -156,6 +162,7 @@ class LLMLogStore:
                 error=row.get("error"),
                 original_user_message=row.get("original_user_message"),
                 current_task_brief=row.get("current_task_brief"),
+                tool_observations=row.get("tool_observations", []),
                 created_at=datetime.fromisoformat(row["created_at"].replace("Z", "+00:00"))
             )
             for row in response.data
@@ -185,6 +192,7 @@ class LLMLogStore:
             error=row.get("error"),
             original_user_message=row.get("original_user_message"),
             current_task_brief=row.get("current_task_brief"),
+            tool_observations=row.get("tool_observations", []),
             created_at=datetime.fromisoformat(row["created_at"].replace("Z", "+00:00"))
         )
 
