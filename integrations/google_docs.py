@@ -233,17 +233,28 @@ class GoogleDocsClient:
                 print(f"Could not find text: {search_text}")
                 return False
             
-            # Calculate the insertion index
-            # We need to find which segment contains this text and get the actual index
-            for segment in doc.segments:
-                segment_text = segment.text
-                if search_text in segment_text:
-                    # Found it in this segment
-                    local_pos = segment_text.find(search_text)
-                    # Insert after the search text
-                    insert_index = segment.start_index + local_pos + len(search_text)
-                    return self.insert_text(document_id, text_to_insert, insert_index)
+            # Calculate where search text ends in body_text
+            end_position = position + len(search_text)
             
+            # Map end position in body_text to document index
+            # This handles cases where formatting splits text across multiple segments
+            cumulative_chars = 0
+            for segment in doc.segments:
+                segment_length = len(segment.text)
+                segment_end = cumulative_chars + segment_length
+                
+                # Check if search text ends in this segment
+                if cumulative_chars < end_position <= segment_end:
+                    # Calculate how many chars into this segment the end position is
+                    chars_into_segment = end_position - cumulative_chars
+                    # Document index where search text ends (insertion point)
+                    insert_index = segment.start_index + chars_into_segment
+                    return self.insert_text(document_id, text_to_insert, insert_index)
+                
+                cumulative_chars += segment_length
+            
+            # Should not reach here if position was found
+            print(f"Could not map position to document index for: {search_text}")
             return False
         except Exception as e:
             print(f"Error inserting after text: {e}")
