@@ -26,3 +26,4 @@ ORDER BY id DESC;
 
 -- Add a comment describing the column
 COMMENT ON COLUMN llm_logs.tool_observations IS 'Tool observations collected during the agent run (contains file IDs, search results, etc.)';
+ 

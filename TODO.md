@@ -19,7 +19,8 @@
 
 ## Doing Queue
 
-- [ ] 
+- [x] Bug fix: Making sure that the AI is able to access the document even in longer conversations (it doesn't store the doc ID it seems, just the doc name, and then it thinks it can't access the doc)
+- [ ] Bug fix: When using the "after_text" tool when inserting text into the doc, if the doc has bold text, then the "after_text" tool doesn't find the exact location 
 
 ---
 
