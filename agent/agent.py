@@ -2,7 +2,7 @@
 
 import json
 import re
-from typing import Optional
+from typing import Optional, Tuple
 from dataclasses import dataclass
 
 from config.settings import get_settings
@@ -93,7 +93,7 @@ class Agent:
         original_user_message: Optional[str] = None,
         current_focus: Optional[str] = None,
         tool_observations: list[dict] = None
-    ) -> str:
+    ) -> Tuple[str, Optional['LLMLog']]:
         """
         Call the LLM with the given prompts.
         
@@ -155,8 +155,9 @@ class Agent:
             except Exception as e:
                 error = str(e)
                 print(f"ERROR in OpenAI API call: {e}")
+                log_entry = None
                 try:
-                    self.llm_log_store.log_request(
+                    log_entry = self.llm_log_store.log_request(
                         conversation_id=conversation_id,
                         iteration=iteration,
                         provider="openai",
@@ -172,7 +173,7 @@ class Agent:
                     )
                 except Exception as log_error:
                     print(f"Warning: Failed to log LLM error: {log_error}")
-                raise
+                return "", log_entry
         elif self.settings.llm_provider == "anthropic":
             full_messages_for_log = [{"role": "system", "content": system_prompt}] + messages.copy()
             
@@ -194,8 +195,9 @@ class Agent:
             except Exception as e:
                 error = str(e)
                 print(f"ERROR in Anthropic API call: {e}")
+                log_entry = None
                 try:
-                    self.llm_log_store.log_request(
+                    log_entry = self.llm_log_store.log_request(
                         conversation_id=conversation_id,
                         iteration=iteration,
                         provider="anthropic",
@@ -211,13 +213,14 @@ class Agent:
                     )
                 except Exception as log_error:
                     print(f"Warning: Failed to log LLM error: {log_error}")
-                raise
+                return "", log_entry
         else:
             raise ValueError(f"Unknown LLM provider: {self.settings.llm_provider}")
         
         # Log successful request
+        log_entry = None
         try:
-            self.llm_log_store.log_request(
+            log_entry = self.llm_log_store.log_request(
                 conversation_id=conversation_id,
                 iteration=iteration,
                 provider=self.settings.llm_provider,
@@ -236,7 +239,7 @@ class Agent:
             print(f"Warning: Failed to log LLM request: {log_error}")
             print(f"Logging error details: {traceback.format_exc()}")
         
-        return response_text
+        return response_text, log_entry
     
     def _extract_focus(self, response_text: str) -> Optional[str]:
         """
@@ -418,7 +421,7 @@ class Agent:
         
         for i in range(max_iterations):
             # Get LLM response
-            response_text = self._call_llm(
+            response_text, log_entry = self._call_llm(
                 system_prompt,
                 current_prompt,
                 history,
@@ -478,12 +481,23 @@ class Agent:
                 )
                 
                 # Collect tool observation for logging
-                collected_tool_observations.append({
+                tool_observation = {
                     "iteration": i,
                     "tool_name": response.action_name,
                     "action_input": response.action_input,
                     "observation": observation
-                })
+                }
+                collected_tool_observations.append(tool_observation)
+                
+                # Update the log entry for this iteration with the tool observation
+                if log_entry:
+                    try:
+                        # Get current tool observations and append the new one
+                        current_observations = log_entry.tool_observations.copy() if log_entry.tool_observations else []
+                        current_observations.append(tool_observation)
+                        self.llm_log_store.update_tool_observations(log_entry.id, current_observations)
+                    except Exception as update_error:
+                        print(f"Warning: Failed to update tool observations in log: {update_error}")
                 
                 # Preserve the original user message in history
                 if i == 0:

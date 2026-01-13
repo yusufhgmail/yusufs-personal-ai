@@ -195,4 +195,16 @@ class LLMLogStore:
             tool_observations=row.get("tool_observations", []),
             created_at=datetime.fromisoformat(row["created_at"].replace("Z", "+00:00"))
         )
+    
+    def update_tool_observations(self, log_id: int, tool_observations: List[dict]) -> bool:
+        """Update tool_observations for an existing log entry."""
+        try:
+            self.client.table(self.table)\
+                .update({"tool_observations": tool_observations})\
+                .eq("id", log_id)\
+                .execute()
+            return True
+        except Exception as e:
+            print(f"Error updating tool observations: {e}")
+            return False
 

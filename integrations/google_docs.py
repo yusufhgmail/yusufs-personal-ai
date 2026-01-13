@@ -1,7 +1,8 @@
 """Google Docs API integration for editing documents."""
 
 import os
-from typing import Optional
+import re
+from typing import Optional, Tuple
 from dataclasses import dataclass
 
 from google.oauth2.credentials import Credentials
@@ -207,10 +208,123 @@ class GoogleDocsClient:
             print(f"Error inserting at beginning: {e}")
             return False
     
+    def _normalize_whitespace(self, text: str) -> str:
+        """Normalize whitespace: collapse all whitespace sequences to single space, trim."""
+        # Replace all whitespace sequences with single space
+        normalized = re.sub(r'\s+', ' ', text)
+        # Trim leading/trailing whitespace
+        return normalized.strip()
+    
+    def _find_text_with_variations(self, body_text: str, search_text: str) -> Optional[int]:
+        """
+        Try to find search_text in body_text using multiple strategies.
+        
+        Returns:
+            Position in body_text where match is found, or None if not found
+        """
+        # Strategy 1: Exact match
+        position = body_text.find(search_text)
+        if position != -1:
+            return position
+        
+        # Strategy 2: Normalized whitespace match
+        normalized_search = self._normalize_whitespace(search_text)
+        normalized_body = self._normalize_whitespace(body_text)
+        
+        if normalized_search and normalized_body:
+            normalized_pos = normalized_body.find(normalized_search)
+            if normalized_pos != -1:
+                # Find the corresponding position in original text
+                # Use a sliding window approach to find the best match
+                # Search for a unique substring from the normalized match
+                # For simplicity, try to find the core text (without leading/trailing whitespace)
+                core_search = search_text.strip()
+                if core_search:
+                    # Try to find the core text in a reasonable region
+                    # Estimate position based on normalized match
+                    estimated_start = max(0, int(normalized_pos * len(body_text) / len(normalized_body)) - 100)
+                    estimated_end = min(len(body_text), estimated_start + len(search_text) + 200)
+                    search_region = body_text[estimated_start:estimated_end]
+                    
+                    # Try exact match of core text
+                    core_pos = search_region.find(core_search)
+                    if core_pos != -1:
+                        return estimated_start + core_pos
+                    
+                    # Try with normalized core
+                    normalized_core = self._normalize_whitespace(core_search)
+                    if normalized_core:
+                        normalized_region = self._normalize_whitespace(search_region)
+                        normalized_core_pos = normalized_region.find(normalized_core)
+                        if normalized_core_pos != -1:
+                            # Map back approximately
+                            return estimated_start + normalized_core_pos
+        
+        # Strategy 3: Without trailing whitespace
+        search_no_trailing = search_text.rstrip()
+        if search_no_trailing and search_no_trailing != search_text:
+            position = body_text.find(search_no_trailing)
+            if position != -1:
+                return position
+        
+        # Strategy 4: Without leading whitespace
+        search_no_leading = search_text.lstrip()
+        if search_no_leading and search_no_leading != search_text:
+            position = body_text.find(search_no_leading)
+            if position != -1:
+                return position
+        
+        # Strategy 5: Fully trimmed
+        search_trimmed = search_text.strip()
+        if search_trimmed and search_trimmed != search_text:
+            position = body_text.find(search_trimmed)
+            if position != -1:
+                return position
+        
+        return None
+    
+    def _map_position_to_document_index(self, doc: DocumentContent, position: int, search_text_length: int) -> Optional[int]:
+        """
+        Map a character position in body_text to a document index.
+        
+        Args:
+            doc: DocumentContent object
+            position: Character position in body_text where search text starts
+            search_text_length: Length of the search text
+            
+        Returns:
+            Document index where search text ends (insertion point), or None if not found
+        """
+        # Calculate where search text ends in body_text
+        end_position = position + search_text_length
+        
+        # Map end position in body_text to document index
+        # This handles cases where formatting splits text across multiple segments
+        cumulative_chars = 0
+        for segment in doc.segments:
+            segment_length = len(segment.text)
+            segment_end = cumulative_chars + segment_length
+            
+            # Check if search text ends in this segment
+            if cumulative_chars < end_position <= segment_end:
+                # Calculate how many chars into this segment the end position is
+                chars_into_segment = end_position - cumulative_chars
+                # Document index where search text ends (insertion point)
+                return segment.start_index + chars_into_segment
+            
+            cumulative_chars += segment_length
+        
+        return None
+    
     def insert_after_text(self, document_id: str, search_text: str, text_to_insert: str) -> bool:
         """
         Insert text right after a specific text pattern in the document.
         This is useful for inserting answers after questions.
+        
+        Tries multiple search strategies to handle whitespace differences:
+        1. Exact match (fast path)
+        2. Normalized whitespace match
+        3. Match without trailing whitespace
         
         Args:
             document_id: The Google Doc ID
@@ -225,36 +339,38 @@ class GoogleDocsClient:
             if not doc:
                 return False
             
-            # Find the search text in the document
             body_text = doc.body_text
-            position = body_text.find(search_text)
             
-            if position == -1:
-                print(f"Could not find text: {search_text}")
-                return False
+            # Try multiple search strategies
+            position = self._find_text_with_variations(body_text, search_text)
             
-            # Calculate where search text ends in body_text
-            end_position = position + len(search_text)
-            
-            # Map end position in body_text to document index
-            # This handles cases where formatting splits text across multiple segments
-            cumulative_chars = 0
-            for segment in doc.segments:
-                segment_length = len(segment.text)
-                segment_end = cumulative_chars + segment_length
+            if position is not None:
+                # Determine the actual search text length that was matched
+                # Try to find which variant matched
+                matched_length = len(search_text)
                 
-                # Check if search text ends in this segment
-                if cumulative_chars < end_position <= segment_end:
-                    # Calculate how many chars into this segment the end position is
-                    chars_into_segment = end_position - cumulative_chars
-                    # Document index where search text ends (insertion point)
-                    insert_index = segment.start_index + chars_into_segment
+                # Check if it was an exact match
+                if position + len(search_text) <= len(body_text) and body_text[position:position+len(search_text)] == search_text:
+                    matched_length = len(search_text)
+                else:
+                    # Try to determine which variant matched
+                    variants = [
+                        (search_text.rstrip(), len(search_text.rstrip())),
+                        (search_text.lstrip(), len(search_text.lstrip())),
+                        (search_text.strip(), len(search_text.strip())),
+                    ]
+                    
+                    for variant_text, variant_len in variants:
+                        if variant_text and position + variant_len <= len(body_text) and body_text[position:position+variant_len] == variant_text:
+                            matched_length = variant_len
+                            break
+                
+                insert_index = self._map_position_to_document_index(doc, position, matched_length)
+                if insert_index is not None:
                     return self.insert_text(document_id, text_to_insert, insert_index)
-                
-                cumulative_chars += segment_length
             
-            # Should not reach here if position was found
-            print(f"Could not map position to document index for: {search_text}")
+            # All strategies failed
+            print(f"Could not find text after trying multiple strategies: {search_text[:100]}...")
             return False
         except Exception as e:
             print(f"Error inserting after text: {e}")
