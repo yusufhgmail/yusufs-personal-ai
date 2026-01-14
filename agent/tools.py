@@ -595,12 +595,27 @@ def create_default_registry(gmail_client=None, drive_client=None, docs_client=No
     # Register memory tools
     registry.register(Tool(
         name="remember_fact",
-        description="Store a fact about Yusuf in memory. Use this when Yusuf shares important information about himself, his life, people he knows, events, goals, or circumstances. Facts should be objective information, not preferences.",
+        description="""Store a fact about Yusuf in memory. This is a CRITICAL tool for building your knowledge about Yusuf so you can assist him effectively without asking repetitive questions.
+
+USE THIS TOOL PROACTIVELY - don't wait for explicit instruction. After every conversation, extract and store any new factual information about:
+- People: names, relationships, roles, companies (e.g., "Miguel is a friend who works at Google", "Sarah is the project manager for the Q&A document")
+- Events: what happened, when, where, who was involved (e.g., "Yusuf attended a conference in San Francisco in March 2024")
+- Circumstances: current situation, context, status (e.g., "Yusuf is currently working on a personal AI assistant project")
+- Goals: what Yusuf is trying to achieve (e.g., "Yusuf wants to automate email responses")
+- Accomplishments: what Yusuf has done, completed projects (e.g., "Yusuf started his company in 2020")
+- Life details: work, projects, activities, locations, dates (e.g., "Yusuf uses Railway for deployment")
+
+When to use:
+- Immediately when Yusuf mentions factual information during a conversation
+- After completing your primary task, review the conversation for new facts
+- When in doubt, err on the side of storing facts - better to remember too much than too little
+
+Facts should be objective information, not preferences (preferences go in guidelines). Store facts that will help you perform tasks accurately without needing to ask Yusuf again.""",
         func=remember_fact,
         parameters={
             "type": "object",
             "properties": {
-                "fact": {"type": "string", "description": "The fact to remember (e.g., 'Miguel is a friend who works at Google' or 'Yusuf started his company in 2020')"}
+                "fact": {"type": "string", "description": "The fact to remember. Be specific and include relevant context. Examples: 'Miguel is a friend who works at Google', 'Yusuf started his company in 2020', 'Sarah is the project manager for the Q&A document', 'Yusuf is currently working on a personal AI assistant project'"}
             },
             "required": ["fact"]
         }
