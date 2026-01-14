@@ -61,7 +61,7 @@ Create a `.env` file in the project root with the following variables:
 ```bash
 # LLM Configuration
 LLM_PROVIDER=openai                    # or "anthropic"
-LLM_MODEL=gpt-4-turbo-preview          # or claude-3-opus-20240229
+LLM_MODEL=gpt-4o                      # or claude-3-opus-20240229
 OPENAI_API_KEY=sk-your-key-here        # if using OpenAI
 ANTHROPIC_API_KEY=sk-ant-your-key-here # if using Anthropic
 

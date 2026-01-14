@@ -63,7 +63,7 @@ def create_env_file():
     # Write .env file
     env_content = f"""# LLM Configuration
 LLM_PROVIDER=openai
-LLM_MODEL=gpt-4-turbo-preview
+LLM_MODEL=gpt-4o
 OPENAI_API_KEY={openai_key}
 
 # Supabase Configuration
