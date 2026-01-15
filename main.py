@@ -19,17 +19,6 @@ from integrations.discord_bot import DiscordBot, ConversationManager
 from integrations.gmail import GmailClient
 from integrations.google_drive import GoogleDriveClient
 from integrations.google_docs import GoogleDocsClient
-from learning.observer import LearningObserver
-
-
-def create_learning_observer() -> LearningObserver:
-    """Create the learning observer."""
-    guidelines_store = GuidelinesStore()
-    interactions_store = InteractionsStore()
-    return LearningObserver(
-        guidelines_store=guidelines_store,
-        interactions_store=interactions_store
-    )
 
 
 def create_agent(gmail_client=None, drive_client=None, docs_client=None) -> Agent:
@@ -104,12 +93,8 @@ def run_discord_bot():
     guidelines = agent.guidelines_store.get_or_create_current()
     print(f"Guidelines loaded (version {guidelines.version})")
     
-    # Create learning observer
-    learning_observer = create_learning_observer()
-    print("Learning Observer initialized")
-    
-    # Create conversation manager with learning observer
-    conversation_manager = ConversationManager(agent, learning_observer=learning_observer)
+    # Create conversation manager
+    conversation_manager = ConversationManager(agent)
     
     # Create and run Discord bot
     bot = DiscordBot(message_handler=conversation_manager.handle_message)
