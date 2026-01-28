@@ -23,11 +23,15 @@
 
 ## Queue Next
 
+### Core
 - [ ] Make the workflow more automated and conversational - when asked to do something, the AI should proactively ask clarifying questions and gather more information like a real person would, rather than just blindly executing tasks without thinking. It should engage in a dialogue to understand the full context and requirements before proceeding.
+
+### Side track
+- [ ] Compare to Clawdbot's code and see how they've implemented vs. how I've implemented.
 
 ---
 
-- [ ] 
+- [ ] Fix so auth is persistent or easy to reauth
 
 ---
 
